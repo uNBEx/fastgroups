@@ -23,9 +23,12 @@ if ! "$LUA" -v 2>&1 | grep -q "Lua 5.1"; then
     exit 1
 fi
 
-FILES=$(find . -path ./resources -prune -o -path ./.git -prune -o -type f \
+# skips the build output and the Lua / LuaRocks trees CI installs into the checkout
+FILES=$(find . \( -path ./resources -o -path ./.git -o -path ./.release -o -path ./.lua \
+        -o -path ./.luarocks -o -path ./.install -o -path ./.source \) -prune -o -type f \
     \( -name '*.lua' -o -name '*.toc' -o -name '*.md' -o -name '*.py' -o -name '*.sh' \
-       -o -name '.luacheckrc' -o -name '.pkgmeta' -o -name '*.txt' \) -print)
+       -o -name '.luacheckrc' -o -name '.pkgmeta' -o -name '*.txt' -o -name '*.yml' \
+       -o -name 'LICENSE' \) -print)
 
 echo "== ASCII"
 if grep -nP '[^\x00-\x7F]' $FILES; then

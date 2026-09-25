@@ -1,0 +1,42 @@
+name: Release
+
+# Pushing an annotated tag vX.Y.Z publishes to CurseForge, Wago and GitHub Releases.
+# Tags containing "beta" or "alpha" publish to those channels (GitHub: prerelease).
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: leafo/gh-actions-lua@v13
+        with:
+          luaVersion: "5.1.5"
+      - uses: leafo/gh-actions-luarocks@v6
+      - run: luarocks install luacheck
+      - run: tools/check.sh
+
+  release:
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Release notes
+        run: |
+          if ! grep -qE "^## ${GITHUB_REF_NAME} - [0-9]{4}-[0-9]{2}-[0-9]{2}$" CHANGELOG.md; then
+            echo "CHANGELOG.md needs a dated heading: ## ${GITHUB_REF_NAME} - YYYY-MM-DD" >&2
+            exit 1
+          fi
+          tools/release-notes.sh "$GITHUB_REF_NAME" > RELEASE_NOTES.md
+      # the upload tokens are only visible to this step; the packager never prints them
+      - uses: BigWigsMods/packager@v2
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+          GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}

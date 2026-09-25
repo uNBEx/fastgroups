@@ -4,3 +4,6 @@ CLAUDE.local.md
 *.swp
 .DS_Store
 __pycache__/
+.release/
+RELEASE_NOTES.md
+.claude/

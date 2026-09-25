@@ -1,9 +1,23 @@
 package-as: FastGroups
 
+manual-changelog:
+  filename: RELEASE_NOTES.md
+  markup-type: markdown
+
+embedded-libraries:
+  - libstub
+  - callbackhandler
+  - libdatabroker-1-1
+  - libdbicon-1-0
+
 ignore:
+  - .github
   - tests
   - tools
+  - docs
   - resources
+  - CHANGELOG.md
+  - RELEASE_NOTES.md
   - CLAUDE.md
   - CLAUDE.local.md
   - IDEAS.md
