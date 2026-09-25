@@ -7,15 +7,24 @@ absent/new player reconciliation, planning rosters, and preset sharing (export s
 hidden addon comms). Only the person arranging groups needs it installed.
 
 ## Status
-- v0.1 implemented. All offline checks pass (`tools/check.sh`). **Not yet tested in game**;
-  the first in-game session will surface layout and API details the mocks cannot.
+- Implemented and in use in game; all offline checks pass (`tools/check.sh`). The version comes
+  from git tags (see Versions); the first public release is v0.2.0.
 - The approved UI mockup is `resources/mockup/index.html` (gitignored, local only). The addon
   follows it closely.
 - Never push to the remote without the user's explicit approval. Local commits are fine.
 
 ## Layout
 ```
-FastGroups.toc          load order; Interface 120100; SavedVariables FastGroupsDB
+FastGroups.toc          load order; Interface 120100; SavedVariables FastGroupsDB; X- fields
+                        (license, website, CurseForge / Wago project IDs for the packager)
+.pkgmeta                packager config: package name, manual changelog, embedded libs, ignores
+.github/workflows/      ci.yml (check.sh on every push/PR), release.yml (tag -> publish)
+CHANGELOG.md            per-version player-facing notes; one "## vX.Y.Z - YYYY-MM-DD" section each
+LICENSE                 All Rights Reserved (Libs/ and the Inter font keep their own)
+docs/DESCRIPTION.md     CurseForge / Wago store page text (pasted by hand)
+docs/logo/              store page logo, 512px PNGs (uploaded by hand)
+.claude/skills/         release (/release) and housekeeping (/housekeeping) checklists; local only,
+                        gitignored (back them up by hand)
 Libs/                   LibStub, CallbackHandler-1.0, LibDataBroker-1.1, LibDBIcon-1.0
 Media/                  TGA textures (Icons/, round6, ring6, round3, circle, square, ring0) + Inter fonts
 Core/Init.lua           namespace, event dispatcher (ns.RegisterEvent per owner), messages
@@ -44,7 +53,8 @@ UI/SharePage.lua        export / import / send in game
 UI/OptionsPage.lua      options
 UI/Minimap.lua          LDB launcher + LibDBIcon (created only when shown)
 tests/                  wow_stub.lua, run.lua (unit), ui_mock.lua + ui_smoke.lua (UI)
-tools/                  check.sh, deploy.sh, gen_media.py
+tools/                  check.sh, deploy.sh, package.sh (local packager dry run into .release/),
+                        release-notes.sh (one CHANGELOG section), gen_media.py
 ```
 
 ## Domain rules that drive the design
@@ -101,6 +111,32 @@ tools/                  check.sh, deploy.sh, gen_media.py
   "SetPoint would result in anchor family connection".
 - Blizzard UI source: `resources/wow-ui-source` (shallow clone of Gethe/wow-ui-source, branch
   `live`, gitignored). Re-clone if missing.
+
+## Versions
+- Addon version = the git tag, SemVer with a `v`: `vMAJOR.MINOR.PATCH`, betas `vX.Y.Z-beta.N`.
+  PATCH: fixes, TOC interface bumps, library updates. MINOR: features and options (and, while on
+  0.x, breaking saved data or share-format compatibility). MAJOR: 1.0 when it has proven itself
+  in real raids; after that, format breaks. The TOC keeps `@project-version@`; untagged builds
+  show "dev" (`Core/Init.lua`).
+- Internal format numbers are separate and change only when the format does, always keeping
+  older data readable:
+  - `DB_VERSION` in `Core/Init.lua`: SavedVariables schema, with migrations in `initDB`.
+  - payload `v` in `Core/Serialize.lua`: export strings and in-game shares (a newer `v` is
+    refused with "Made by a newer FastGroups version").
+  - Comm message letters in `Core/Comm.lua` (O/A/D/C): add new letters rather than changing
+    existing ones, older clients ignore unknown ones.
+
+## Releasing
+- `/release` (local skill in `.claude/skills/release`, gitignored) walks the whole thing; `/housekeeping` covers
+  patch-day upkeep (interface bump, libs, API deprecations, docs drift).
+- Pushing an annotated tag `v*` runs `.github/workflows/release.yml`: check.sh, then the BigWigs
+  packager uploads to CurseForge (`CF_API_KEY`), Wago (`WAGO_API_TOKEN`) and GitHub Releases.
+  The tag's CHANGELOG section (with a dated heading) becomes the notes everywhere; a tag with
+  "beta"/"alpha" publishes to that channel. Nothing publishes on plain pushes.
+- Keep in sync when things change: README (features, usage), docs/DESCRIPTION.md (store pages,
+  manual paste), CHANGELOG.md, this file's Layout, `.pkgmeta` ignores for new dev-only files
+  (tools/deploy.sh reads the same list).
+- Never create or push a tag without the user's approval.
 
 ## Conventions
 - Lua 5.1, one namespace table (`local _, ns = ...`), no globals except FastGroupsDB, the slash
