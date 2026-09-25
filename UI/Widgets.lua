@@ -451,6 +451,10 @@ end
 -- A vertical Slider on the right of the scroll frame. The Slider does the
 -- dragging; its thumb is an invisible hit area and the visible bar is a thin
 -- capsule drawn from two half circles (or squares) and a rect.
+-- The thumb stays small (THUMB_MIN..THUMB_MAX): the engine Slider does not
+-- keep the grab point on a thumb that fills most of the bar, so dragging a
+-- near-full thumb jumped the wrong way. Blizzard's Slider bars use small thumbs too.
+local THUMB_MIN, THUMB_MAX = 20, 40
 local function attachScrollBar(sf, parent)
     local bar = CreateFrame("Slider", nil, parent)
     bar:SetWidth(8)
@@ -480,7 +484,9 @@ local function attachScrollBar(sf, parent)
         end
         bar:SetShown(range > 0.5)
         local h = bar:GetHeight()
-        if h > 0 then thumb:SetHeight(math.max(20, math.floor(h * h / (h + range)))) end
+        if h > 0 then
+            thumb:SetHeight(math.max(THUMB_MIN, math.min(THUMB_MAX, math.floor(h * h / (h + range)))))
+        end
         bar:SetMinMaxValues(0, range)
         bar:SetValue(cur)
     end
