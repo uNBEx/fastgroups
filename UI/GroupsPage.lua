@@ -279,10 +279,20 @@ local function onCardDragStart(c)
     dragCard:SetScale(main:GetEffectiveScale() / UIParent:GetEffectiveScale())
     fillCard(dragCard, c.key, false)
     dragCard:SetSize(c:GetSize())
+    -- Keep the point that was pressed under the cursor. The float and the
+    -- card share one effective scale, so one conversion serves both.
+    local s = dragCard:GetEffectiveScale()
+    local cx, cy = GetCursorPosition()
+    local dx, dy = Page.downX or cx, Page.downY or cy
+    Page.downX, Page.downY = nil, nil
+    local gx, gy = dx / s - c:GetLeft(), c:GetTop() - dy / s
     dragCard:ClearAllPoints()
-    dragCard:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", c:GetLeft(), c:GetTop())
+    dragCard:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", cx / s - gx, cy / s + gy)
     dragCard:Show()
-    dragCard:StartMoving()
+    -- Resolve the new anchor now; otherwise StartMoving can measure the
+    -- cursor offset against the rect left over from the previous drag.
+    dragCard:GetLeft()
+    dragCard:StartMoving(true)
     c:SetAlpha(0.25)
     Page.dragKey = c.key
     Page.dragSource = c
@@ -423,6 +433,9 @@ local function acquireCard(parent)
         c:RegisterForClicks("RightButtonUp")
         c:SetScript("OnDragStart", onCardDragStart)
         c:SetScript("OnDragStop", onCardDragStop)
+        c:SetScript("OnMouseDown", function(_, mouse)
+            if mouse == "LeftButton" then Page.downX, Page.downY = GetCursorPosition() end
+        end)
         c:SetScript("OnClick", function(self, mouse)
             if mouse == "RightButton" and not self.ghost and not Page.dragKey then cardMenu(self) end
         end)
