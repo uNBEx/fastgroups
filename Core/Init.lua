@@ -134,12 +134,16 @@ end
 ns.ApplyDefaults = applyDefaults
 
 local PLAYER_EXPIRY = 180 * 24 * 3600
+-- SavedVariables schema. Bump it only when stored data changes shape, and add a migration
+-- below so older data keeps loading.
+local DB_VERSION = 1
 
 local function initDB()
     if type(FastGroupsDB) ~= "table" then FastGroupsDB = {} end
     local db = FastGroupsDB
     applyDefaults(db, ns.defaults)
-    db.version = 1
+    -- migrations, oldest first: if (db.version or 0) < 2 then ... end
+    db.version = DB_VERSION
     -- forget players not seen for half a year, unless a roster or loadout still uses them
     local keep = {}
     for _, r in ipairs(db.rosters) do
