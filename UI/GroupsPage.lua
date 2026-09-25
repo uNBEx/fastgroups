@@ -10,6 +10,8 @@ UI.RegisterPage("groups", Page)
 
 local PAD = 14
 local TOOLBAR_H = 52
+local TOOLBAR_Y = 12   -- top of the 28px controls in a toolbar row
+local TOOLBAR_ROW = 40 -- extra height of the second row when the toolbar wraps
 local CARD_H = 30
 local GAP = 3
 local COL_PAD = 5
@@ -787,21 +789,32 @@ local function fillCounters(f, side, width)
     local other = all and NO_COUNTS or Board:Counts(side == "L" and "R" or "L")
     local ovals = { T = other.T, H = other.H, M = other.M, R = other.R, U = other.U }
     local where = all and (" in groups 1-" .. Board:K()) or nil
+    -- role chips: with labels when all of them fit the width, numbers only otherwise
+    local full = 0
+    for _, c in ipairs(f.roles) do
+        local k = c.key
+        c.shown = not (k == "U" and vals.U == 0 and ovals.U == 0)
+        if c.shown then
+            c.num:SetText(vals[k])
+            c.short = math.floor(8 + 14 + 6 + c.num:GetUnboundedStringWidth() + 9)
+            c.full = math.floor(c.short + 5 + c.label:GetUnboundedStringWidth())
+            full = full + c.full + 5
+        end
+    end
+    local labels = full - 5 <= width
     local x = 0
     for _, c in ipairs(f.roles) do
         local k = c.key
-        if k == "U" and vals.U == 0 and ovals.U == 0 then
+        if not c.shown then
             c:Hide()
         else
             local bad = not all and k ~= "U" and Board.Uneven(vals[k], ovals[k])
-            c.num:SetText(vals[k])
             c.num:SetTextColor(T.Color(bad and "warn" or "text"))
             c.border:SetVertexColor(T.Color(bad and "warn" or "line"))
             c.border:SetAlpha(bad and 0.7 or 1)
             c.tip = vals[k] .. " " .. ROLE_NAMES[k] .. (where or (" here, " .. ovals[k] .. " on the other half"))
-            c.label:SetShown(width > 330)
-            local w = 8 + 14 + 6 + c.num:GetUnboundedStringWidth() + (c.label:IsShown() and (5 + c.label:GetUnboundedStringWidth()) or 0) + 9
-            c:SetWidth(math.floor(w))
+            c.label:SetShown(labels)
+            c:SetWidth(labels and c.full or c.short)
             c:ClearAllPoints()
             c:SetPoint("TOPLEFT", x, 0)
             c:Show()
@@ -895,12 +908,13 @@ function Page:Build(f)
     line:SetPoint("BOTTOMLEFT")
     line:SetPoint("BOTTOMRIGHT")
     self.toolbar = tb
+    self.toolbarRows = 1
 
     self.sourceBtn = W.Button(tb, { text = "", height = 28, weight = "regular", onClick = function(b) sourceMenu(b) end,
         tooltip = "What the board shows: the live raid, the demo raid, or a planning roster." })
     self.sourceBtn.chev = W.Icon(self.sourceBtn, "chevron", 10, T.Color("muted"))
     self.sourceBtn.chev:SetRotation(-math.pi / 2)
-    self.sourceBtn:SetPoint("LEFT", PAD, 0)
+    self.sourceBtn:SetPoint("TOPLEFT", PAD, -TOOLBAR_Y)
 
     self.conv = W.Segmented(tb, { { "oddeven", "Odd / Even" }, { "split", "1-2 / 3-4" }, { "none", "Simple" } },
         function() return ns.settings.conv end,
@@ -919,7 +933,7 @@ function Page:Build(f)
     self.sharedBtn:Hide()
 
     self.apply = W.Button(tb, { text = "Apply", icon = "play", kind = "primary", height = 28, onClick = function() Page:OnApply() end })
-    self.apply:SetPoint("RIGHT", -PAD, 0)
+    self.apply:SetPoint("TOPRIGHT", -PAD, -TOOLBAR_Y)
     self.stop = W.IconButton(tb, "close", 28, "Stop applying", function() ns.Apply:Stop() end)
     self.stop:SetPoint("RIGHT", self.apply, "LEFT", -4, 0)
     self.save = W.Button(tb, { text = "Save", icon = "save", height = 28, onClick = function() UI.SaveDialog() end,
@@ -1100,14 +1114,6 @@ function Page:RefreshToolbar()
     local none = Board.source == "none"
     local apply = ns.Apply
 
-    self.sourceBtn:SetLabel(sourceLabel())
-    self.sourceBtn:SetWidth(math.min(self.sourceBtn:GetWidth() + 18, 190))
-    self.sourceBtn.label:SetWidth(self.sourceBtn:GetWidth() - 36)
-    self.sourceBtn.label:ClearAllPoints()
-    self.sourceBtn.label:SetPoint("LEFT", 11, 0)
-    self.sourceBtn.chev:ClearAllPoints()
-    self.sourceBtn.chev:SetPoint("RIGHT", -10, 0)
-
     local L, R = Board.HalvesFor("split", k)
     local function range(list) return #list == 1 and tostring(list[1]) or (list[1] .. "-" .. list[#list]) end
     self.conv:SetItems({
@@ -1118,20 +1124,15 @@ function Page:RefreshToolbar()
     local simple = Board:IsSimple()
     local shared = Board:Shared()
     local groupsCtl = self.groups
+    local autoK = ns.settings.groupsMode == "auto" and k or nil
     if shared then
         self.groups:Hide()
-        self.sharedBtn:SetLabel("Group " .. shared .. " shared")
         self.sharedBtn.tip = { "Groups " .. range(L) .. " and " .. range(R) .. " are the halves; group " .. shared
             .. " is split between them and each of its players has an own side.",
             "Change this under Options > Groups." }
         groupsCtl = self.sharedBtn
     else
         self.sharedBtn:Hide()
-        local autoK = ns.settings.groupsMode == "auto" and k or nil
-        self.groups:SetItems({
-            { "auto", autoK and ("Auto " .. autoK) or "Auto", "Mythic uses groups 1-4; other raids by size." },
-            { 4, "4" }, { 6, "6" },
-        })
     end
 
     -- right side, right to left
@@ -1200,7 +1201,6 @@ function Page:RefreshToolbar()
         if #imb == 0 then
             self.chip.icon:SetTexture(T.ICON .. "check")
             self.chip.icon:SetVertexColor(T.Color("ok"))
-            self.chip.text:SetText("Even")
             self.chip.text:SetTextColor(T.Color("ok"))
             self.chip.border:SetVertexColor(T.Color("ok"))
             self.chip.border:SetAlpha(0.4)
@@ -1209,7 +1209,6 @@ function Page:RefreshToolbar()
         else
             self.chip.icon:SetTexture(T.ICON .. "warn")
             self.chip.icon:SetVertexColor(T.Color("warn"))
-            self.chip.text:SetText(#imb .. " uneven")
             self.chip.text:SetTextColor(T.Color("warn"))
             self.chip.border:SetVertexColor(T.Color("warn"))
             self.chip.border:SetAlpha(0.5)
@@ -1218,32 +1217,79 @@ function Page:RefreshToolbar()
             self.chip.tipTitle = "Uneven between the halves"
             self.chip.tip = { table.concat(names, ", ") }
         end
-        self.chip:SetWidth(math.floor(8 + 13 + 5 + self.chip.text:GetUnboundedStringWidth() + 10))
     end
 
     local conv, groupsSeg = self.conv, groupsCtl
     conv:SetShown(not none)
     groupsSeg:SetShown(not none)
 
-    -- narrow windows: drop button labels before things overlap. Measure with the full labels
-    -- and sum widths instead of reading screen positions, so the result does not depend on the
-    -- previous refresh or on rects that are not resolved yet during a resize.
-    self.split:SetLabel("Auto-split")
-    self.save:SetLabel("Save")
-    if shared then self.sharedBtn:SetLabel("Group " .. shared .. " shared") end
-    local leftW = PAD + self.sourceBtn:GetWidth()
-    if not none then leftW = leftW + 6 + conv:GetWidth() + 6 + groupsSeg:GetWidth() end
-    local rightW = PAD + self.apply:GetWidth() + (running and 4 + self.stop:GetWidth() or 0)
-        + 6 + self.save:GetWidth() + (live and 4 + self.revert:GetWidth() or 0)
-        + (announce and 4 + self.announce:GetWidth() or 0)
-        + (simple and 0 or 6 + self.split:GetWidth()) + (self.chip:IsShown() and 6 + self.chip:GetWidth() or 0)
+    -- Narrow windows: shorten labels first, then wrap the right-hand buttons to a second row.
+    -- Measure by summing widths instead of reading screen positions, so the result does not
+    -- depend on the previous refresh or on rects that are not resolved yet during a resize.
+    local function setLabels(compact)
+        local src = self.sourceBtn
+        src:SetLabel(sourceLabel())
+        src:SetWidth(math.min(src:GetWidth() + 18, compact and 150 or 190))
+        src.label:SetWidth(src:GetWidth() - 36)
+        src.label:ClearAllPoints()
+        src.label:SetPoint("LEFT", 11, 0)
+        src.chev:ClearAllPoints()
+        src.chev:SetPoint("RIGHT", -10, 0)
+        if shared then
+            self.sharedBtn:SetLabel(compact and "Shared" or ("Group " .. shared .. " shared"))
+        else
+            self.groups:SetItems({
+                { "auto", (autoK and not compact) and ("Auto " .. autoK) or "Auto", "Mythic uses groups 1-4; other raids by size." },
+                { 4, "4" }, { 6, "6" },
+            })
+        end
+        self.split:SetLabel(compact and "" or "Auto-split")
+        self.save:SetLabel(compact and "" or "Save")
+        local chip = self.chip
+        if #imb == 0 then
+            chip.text:SetText(compact and "" or "Even")
+        else
+            chip.text:SetText(compact and #imb or (#imb .. " uneven"))
+        end
+        local tw = chip.text:GetUnboundedStringWidth()
+        chip:SetWidth(math.floor(tw > 0 and (8 + 13 + 5 + tw + 10) or (8 + 13 + 8)))
+    end
+    local function measure()
+        local leftW = PAD + self.sourceBtn:GetWidth()
+        if not none then leftW = leftW + 6 + conv:GetWidth() + 6 + groupsSeg:GetWidth() end
+        local rightW = PAD + self.apply:GetWidth() + (running and 4 + self.stop:GetWidth() or 0)
+            + 6 + self.save:GetWidth() + (live and 4 + self.revert:GetWidth() or 0)
+            + (announce and 4 + self.announce:GetWidth() or 0)
+            + (simple and 0 or 6 + self.split:GetWidth()) + (self.chip:IsShown() and 6 + self.chip:GetWidth() or 0)
+        return leftW, rightW
+    end
     local tbW = self.toolbar:GetWidth()
     if tbW < 50 then tbW = self.f:GetWidth() end
+    local rows = 1
+    setLabels(false)
+    local leftW, rightW = measure()
     if leftW + 8 + rightW > tbW then
-        self.split:SetLabel("")
-        self.save:SetLabel("")
-        if shared then self.sharedBtn:SetLabel("Shared") end
+        setLabels(true)
+        leftW, rightW = measure()
+        if leftW + 8 + rightW > tbW then
+            -- two rows: each cluster has the full width, so the full labels come back if they fit
+            rows = 2
+            setLabels(false)
+            leftW, rightW = measure()
+            if math.max(leftW, rightW) + PAD > tbW then setLabels(true) end
+        end
     end
+    self:SetToolbarRows(rows)
+end
+
+function Page:SetToolbarRows(rows)
+    if self.toolbarRows == rows then return end
+    self.toolbarRows = rows
+    local h = TOOLBAR_H + (rows - 1) * TOOLBAR_ROW
+    self.toolbar:SetHeight(h)
+    self.apply:ClearAllPoints()
+    self.apply:SetPoint("TOPRIGHT", -PAD, -(TOOLBAR_Y + (rows - 1) * TOOLBAR_ROW))
+    self.scroll:SetPoint("TOPLEFT", PAD, -(h + 12))
 end
 
 function Page:OnApply()

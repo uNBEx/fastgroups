@@ -9,6 +9,7 @@ UI.RegisterPage("options", Page)
 
 local PAD = 14
 local ROW_H = 46
+local TWO_COLUMNS = 460 -- min box width for two columns
 
 local function s() return ns.settings end
 
@@ -55,6 +56,17 @@ local function newBox(parent, title, desc)
             control:SetPoint("RIGHT", 0, 0)
             tinsert(Page.controls, control)
         end
+        -- text stops before the control and is cut there; the tooltip then has all of it
+        local edge, x = control or row, control and -12 or 0
+        row.label:SetPoint("RIGHT", edge, control and "LEFT" or "RIGHT", x, 0)
+        row.hint:SetPoint("RIGHT", edge, control and "LEFT" or "RIGHT", x, 0)
+        row:EnableMouse(true)
+        row:SetScript("OnEnter", function(r)
+            if r.label:IsTruncated() or r.hint:IsTruncated() then
+                W.Tooltip(r, r.label:GetText(), { r.hint:GetText() })
+            end
+        end)
+        row:SetScript("OnLeave", function() GameTooltip:Hide() end)
         row.control = control
         tinsert(self.rows, row)
         self:SetHeight(52 + #self.rows * ROW_H + 8)
@@ -148,7 +160,7 @@ function Page:Build(f)
     end
     T.OnAccent(function() sw:Refresh() end)
     app:AddRow("Accent color", nil, sw)
-    app:AddRow("Card style", "Filled class color, or dark with a class stripe",
+    app:AddRow("Card style", "Filled, or dark with a class stripe",
         seg({ { "filled", "Filled" }, { "subtle", "Subtle" } }, "cardStyle"))
     app:AddRow("Square corners", "Off for rounded corners", toggle("squareCorners", W.RefreshShapes))
     app:AddRow("Spec name on cards", nil, toggle("showSpec"))
@@ -172,7 +184,7 @@ function Page:Build(f)
 
     -- Groups
     local grp = newBox(c, "Groups", "How the halves map to the raid's groups.")
-    grp:AddRow("Split convention", "Simple: no halves, only groups. Switching keeps everyone on their side",
+    grp:AddRow("Split convention", "Simple: no halves, only groups",
         seg({ { "oddeven", "Odd / Even" }, { "split", "Low / High" }, { "none", "Simple" } }, "conv",
             function(v) Board:SetConvention(v) end))
     local names = CreateFrame("Frame")
@@ -190,22 +202,22 @@ function Page:Build(f)
         if not nR.edit:HasFocus() then nR:SetText(s().halfNames.R) end
     end
     grp:AddRow("Half names", "Shown above the halves", names)
-    grp:AddRow("Groups used", "Auto: 4 on Mythic, otherwise by raid size",
+    grp:AddRow("Groups used", "Auto: 4 on Mythic, else by raid size",
         seg({ { "auto", "Auto" }, { 4, "4" }, { 6, "6" } }, "groupsMode", function(v) Board:SetGroupsMode(v) end))
-    grp:AddRow("Share the odd group", "11-15 or 21-25 players: full groups per half, the last one split",
+    grp:AddRow("Share the odd group", "11-15 or 21-25 players: the last group is split",
         W.Toggle(UIParent, function() return s().sharedGroup end, function(v)
             Board:SetShared(v)
             ns.Fire("SETTINGS_CHANGED", "sharedGroup")
         end))
     grp:AddRow("Arrange columns by half", "Off: groups in order with side tags", toggle("arrangeByHalf"))
-    grp:AddRow("Sort inside a group", "Always tanks, healers, melee, ranged first",
+    grp:AddRow("Sort inside a group", "Tanks, healers, melee, ranged first",
         seg({ { "role", "Then name" }, { "class", "Then class" } }, "sortMode"))
     self.grp = grp
 
     -- Behavior
     local beh = newBox(c, "Behavior", "Features cost nothing while they are off.")
     beh:AddRow("Confirm before Apply", nil, toggle("confirmApply"))
-    beh:AddRow("Detect specs", "Inspects while this window is open; also reads specs shared by BigWigs",
+    beh:AddRow("Detect specs", "Inspects while this window is open",
         toggle("autoInspect", function(v)
             ns.SpecComm.SetEnabled(v)
             ns.Inspect:SetActive(UI.Frame() and UI.Frame():IsShown())
@@ -252,17 +264,26 @@ function Page:Refresh()
     local width = math.floor(self.scroll:GetWidth())
     if width < 50 then width = 760 end
     self.scroll.child:SetWidth(width)
+    -- two columns only when a row has room for its text next to the widest control
     local colW = math.floor((width - 14) / 2)
+    self.columns = colW >= TWO_COLUMNS and 2 or 1
+    if self.columns == 1 then colW = width end
     local function place(b, x, y)
         b:ClearAllPoints()
         b:SetPoint("TOPLEFT", x, -y)
         b:SetWidth(colW)
         return y + b:GetHeight() + 14
     end
-    local y1 = place(self.app, 0, 0)
-    y1 = place(self.beh, 0, y1)
-    y1 = place(self.ann, 0, y1)
-    local y2 = place(self.grp, colW + 14, 0)
-    y2 = place(self.sh, colW + 14, y2)
-    self.scroll.child:SetHeight(math.max(y1, y2))
+    if self.columns == 2 then
+        local y1 = place(self.app, 0, 0)
+        y1 = place(self.beh, 0, y1)
+        y1 = place(self.ann, 0, y1)
+        local y2 = place(self.grp, colW + 14, 0)
+        y2 = place(self.sh, colW + 14, y2)
+        self.scroll.child:SetHeight(math.max(y1, y2))
+    else
+        local y = 0
+        for _, b in ipairs({ self.app, self.grp, self.beh, self.ann, self.sh }) do y = place(b, 0, y) end
+        self.scroll.child:SetHeight(y)
+    end
 end

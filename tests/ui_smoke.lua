@@ -233,7 +233,12 @@ step("rosters page", function()
     local page = UI.pages.rosters
     page.selected = r.id
     page:Refresh()
-    page.detail.addGuild.scripts.OnClick(page.detail.addGuild)
+    ns.W.CloseMenu()
+    page.detail.add.scripts.OnClick(page.detail.add)
+    local entries = ns.W.menuRoot.children
+    check(#entries == 3 and entries[1].text == "From guild...", "add players menu")
+    entries[1].fn()
+    ns.W.CloseMenu()
     page.detail.plan.scripts.OnClick(page.detail.plan)
     check(Board.source == "roster", "planning source")
     check(UI.current == "groups", "switched to groups")
@@ -405,6 +410,57 @@ step("simple mode board", function()
     ns.settings.arrangeByHalf = true   -- the options fuzz flips toggles
     UI.ShowPage("groups")
     check(groups.halves.L:IsShown() and not groups.single:IsShown(), "halves back")
+end)
+
+step("narrow and wide windows fit", function()
+    local frame = UI.Frame()
+    local w0, h0 = frame:GetSize()
+    Board:SetSource("demo")
+    local function toolbarFits()
+        local tb = groups.toolbar
+        local sum, n = 0, 0
+        for _, c in ipairs({ groups.sourceBtn, groups.conv, groups.groups, groups.sharedBtn, groups.chip,
+            groups.split, groups.announce, groups.revert, groups.save, groups.stop, groups.apply }) do
+            if c:IsShown() then sum, n = sum + c:GetWidth(), n + 1 end
+        end
+        return sum + 6 * (n - 1) + 8 + 2 * 14 <= tb:GetWidth()
+    end
+    local function countersFit(f)
+        local x = 0
+        for _, c in ipairs(f.roles) do
+            if c:IsShown() then x = x + c:GetWidth() + 5 end
+        end
+        return x - 5 <= f:GetWidth()
+    end
+    -- the mock gives a page the window's width, so 755 is the real minimum page width
+    frame:SetSize(755, 560)
+    UI.ShowPage("groups")
+    groups:Refresh()
+    check(groups.toolbarRows == 2 or toolbarFits(), "narrow toolbar overlaps")
+    for _, side in ipairs({ "L", "R" }) do
+        check(countersFit(groups.halves[side].counters), "narrow counters overflow on " .. side)
+    end
+    UI.ShowPage("options")
+    check(UI.pages.options.columns == 1, "one options column when narrow")
+    UI.ShowPage("rosters")
+    -- the mock font is narrower than the game's: go tighter so the wrap and the
+    -- numbers-only counters run too
+    frame:SetSize(560, 560)
+    UI.ShowPage("groups")
+    groups:Refresh()
+    check(groups.toolbarRows == 2, "toolbar wraps")
+    check(not groups.halves.L.counters.roles[1].label:IsShown(), "counters drop labels")
+    check(countersFit(groups.halves.L.counters), "tight counters overflow")
+
+    frame:SetSize(1600, 800)
+    UI.ShowPage("groups")
+    groups:Refresh()
+    check(groups.toolbarRows == 1 and toolbarFits(), "wide toolbar on one row")
+    check(groups.split.label:GetText() == "Auto-split", "wide toolbar keeps labels")
+    UI.ShowPage("options")
+    check(UI.pages.options.columns == 2, "two options columns when wide")
+    frame:SetSize(w0, h0)
+    UI.ShowPage("groups")
 end)
 
 step("close window unregisters events", function()

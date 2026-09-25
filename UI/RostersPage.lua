@@ -176,6 +176,33 @@ local function newMemberRow(parent)
     return row
 end
 
+local function addByName()
+    UI.Modal({
+        title = "Add player",
+        text = "Name, or Name-Realm for players from another realm. Set the spec afterwards by clicking it in the list.",
+        input = { text = "", placeholder = "Name-Realm", maxLetters = 64 },
+        buttons = { { text = "Cancel", kind = "ghost" }, { text = "Add", kind = "primary", onClick = function(t)
+            t = strtrim(t or "")
+            if t == "" then return true end
+            local key = Players.Key(t:sub(1, 1):upper() .. t:sub(2))
+            if not Rosters.Add(Page.selected, key) then UI.Toast("Already on this roster.", "warn") end
+        end } },
+    })
+end
+
+local function addRaid()
+    local n = Rosters.AddCurrentRaid(Page.selected)
+    UI.Toast("Added " .. n .. " raid member" .. (n == 1 and "" or "s") .. ".", "ok")
+end
+
+local function addMenu(owner)
+    W.Dropdown(owner, function(_, root)
+        root:CreateButton("From guild...", function() openGuildPicker(Page.selected) end)
+        root:CreateButton("Current raid", addRaid):SetEnabled(IsInRaid())
+        root:CreateButton("By name...", addByName)
+    end)
+end
+
 ---------------------------------------------------------------------------
 -- Build
 ---------------------------------------------------------------------------
@@ -237,9 +264,7 @@ function Page:Build(f)
     W.Skin(d, "panel", "line")
     self.detail = d
     d.name = W.Text(d, 15, "bold", "text")
-    d.name:SetPoint("TOPLEFT", 16, -14)
     d.counts = W.Text(d, 11.5, "regular", "muted")
-    d.counts:SetPoint("TOPLEFT", d.name, "BOTTOMLEFT", 0, -4)
     d.rename = W.IconButton(d, "edit", 24, "Rename", function()
         local r = Rosters.Find(Page.selected)
         if not r then return end
@@ -267,36 +292,20 @@ function Page:Build(f)
         end
     end, tooltip = "Open this roster on the group board." })
     d.plan:SetPoint("TOPRIGHT", -14, -14)
-    d.addName = W.Button(d, { text = "Add by name", icon = "plus", onClick = function()
-        UI.Modal({
-            title = "Add player",
-            text = "Name, or Name-Realm for players from another realm. Set the spec afterwards by clicking it in the list.",
-            input = { text = "", placeholder = "Name-Realm", maxLetters = 64 },
-            buttons = { { text = "Cancel", kind = "ghost" }, { text = "Add", kind = "primary", onClick = function(t)
-                t = strtrim(t or "")
-                if t == "" then return true end
-                local key = Players.Key(t:sub(1, 1):upper() .. t:sub(2))
-                if not Rosters.Add(Page.selected, key) then UI.Toast("Already on this roster.", "warn") end
-            end } },
-        })
-    end })
-    d.addName:SetPoint("RIGHT", d.plan, "LEFT", -6, 0)
-    d.addRaid = W.Button(d, { text = "Add raid", icon = "plus", onClick = function()
-        if not IsInRaid() then
-            UI.Toast("You are not in a raid.", "warn")
-            return
-        end
-        local n = Rosters.AddCurrentRaid(Page.selected)
-        UI.Toast("Added " .. n .. " raid member" .. (n == 1 and "" or "s") .. ".", "ok")
-    end, tooltip = "Add everyone in your current raid." })
-    d.addRaid:SetPoint("RIGHT", d.addName, "LEFT", -6, 0)
-    d.addGuild = W.Button(d, { text = "Add from guild", icon = "plus", onClick = function() openGuildPicker(Page.selected) end })
-    d.addGuild:SetPoint("RIGHT", d.addRaid, "LEFT", -6, 0)
+    d.add = W.Button(d, { text = "Add players", icon = "plus", onClick = function(b) addMenu(b) end })
+    d.add.chev = W.Icon(d.add, "chevron", 10, T.Color("muted"))
+    d.add.chev:SetRotation(-math.pi / 2)
+    d.add.chev:SetPoint("RIGHT", -10, 0)
+    d.add:SetWidth(d.add:GetWidth() + 14)
+    d.add:SetPoint("RIGHT", d.plan, "LEFT", -6, 0)
+    d.name:SetPoint("LEFT", d, "TOPLEFT", 16, -28)
+    d.counts:SetPoint("TOPLEFT", 16, -50)
+    d.counts:SetPoint("RIGHT", -16, 0)
 
     -- table header
     local head = CreateFrame("Frame", nil, d)
-    head:SetPoint("TOPLEFT", 12, -62)
-    head:SetPoint("TOPRIGHT", -12, -62)
+    head:SetPoint("TOPLEFT", 12, -72)
+    head:SetPoint("TOPRIGHT", -12, -72)
     head:SetHeight(22)
     local hl = W.Rect(head, "BORDER", T.Color("line"))
     hl:SetHeight(1)
@@ -311,13 +320,13 @@ function Page:Build(f)
     end
 
     self.members = W.Scroll(d)
-    self.members:SetPoint("TOPLEFT", 12, -86)
+    self.members:SetPoint("TOPLEFT", 12, -96)
     self.members:SetPoint("BOTTOMRIGHT", -22, 10)
     self.memberRows = {}
 
     d.empty = W.Text(d, 12, "regular", "dim")
     d.empty:SetWordWrap(true)
-    d.empty:SetPoint("TOPLEFT", 20, -100)
+    d.empty:SetPoint("TOPLEFT", 20, -110)
     d.empty:SetPoint("RIGHT", -20, 0)
 end
 
@@ -369,16 +378,21 @@ function Page:Refresh()
     local d = self.detail
     local r = Rosters.Find(self.selected)
     local has = r ~= nil
-    for _, x in ipairs({ d.rename, d.delete, d.plan, d.addName, d.addRaid, d.addGuild, d.head }) do x:SetShown(has) end
+    for _, x in ipairs({ d.rename, d.delete, d.plan, d.add, d.head }) do x:SetShown(has) end
     if not r then
         d.name:SetText("No roster yet")
+        d.name:SetWidth(0)
         d.counts:SetText("")
         d.empty:SetText("Create a roster with \"New roster\", then add guild members or your current raid.")
         d.empty:Show()
         for _, row in ipairs(self.memberRows) do row:Hide() end
         return
     end
+    -- long names are cut before the buttons; the rename and delete icons follow the name
     d.name:SetText(r.name)
+    local room = d:GetWidth() - 16 - 4 * 2 - d.rename:GetWidth() - d.delete:GetWidth() - 12
+        - d.add:GetWidth() - 6 - d.plan:GetWidth() - 14
+    d.name:SetWidth(math.max(40, math.min(d.name:GetUnboundedStringWidth() + 2, room)))
     local c = { T = 0, H = 0, M = 0, R = 0, ["?"] = 0 }
     for _, key in ipairs(r.members) do
         local b = Players.Get(key).bucket
