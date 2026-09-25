@@ -1,7 +1,8 @@
 -- /fg demo: a fake 20 player Mythic raid to try the UI without a group.
+-- /fg demo <n>: a flex raid of n players (10-25).
 local _, ns = ...
 
-local Demo = { members = {} }
+local Demo = { members = {}, size = 20, mythic = true }
 ns.Demo = Demo
 
 local REALM = "Silvermoon"
@@ -12,7 +13,10 @@ local ROSTER = {
     { "Tovrin", 72 }, { "Frostvey", 64 }, { "Vexmora", 1480 }, { "Solenne", 257 }, { "Grimholt", 252 },
     { "Lianfei", 269 }, { "Seryth", 1467 }, { "Duskmire", 258 }, { "Shadewhisper", 261 }, { "Ysolde", 265 },
     { "Aurelia", 70 }, { "Arrowyn", 254 }, { "Vaelis", 1468 }, { "Stormjaw", 263 }, { "Moonbrook", 102 },
+    -- only in flex demos above 20
+    { "Korrgan", 73 }, { "Brightforge", 65 }, { "Ravenna", 62 }, { "Wispthorn", 103 }, { "Ashvane", 1473 },
 }
+local MYTHIC_SIZE = 20
 
 -- Known from last week but not here today.
 local ABSENT = { { "Brakka", 71 }, { "Selvyn", 267 }, { "Morvash", 251 } }
@@ -32,9 +36,21 @@ local function addTemp(name, spec)
     ns.Players.temp[key(name)] = { class = sd[1], spec = spec }
 end
 
+-- nil = the default Mythic 20; a number = a flex raid of that size.
+function Demo:SetSize(n)
+    if n then
+        self.size = math.max(10, math.min(#ROSTER, n))
+        self.mythic = false
+    else
+        self.size = MYTHIC_SIZE
+        self.mythic = true
+    end
+end
+
 function Demo:Start()
     wipe(self.members)
-    for i, row in ipairs(ROSTER) do
+    for i = 1, self.size do
+        local row = ROSTER[i]
         addTemp(row[1], row[2])
         local sd = ns.Data.SPECS[row[2]]
         self.members[key(row[1])] = {
@@ -79,7 +95,8 @@ function Demo:EnsureSample()
     local groups, memory, info = {}, {}, {}
     local skip = { Tovrin = true, Ysolde = true, Kaelith = true }
     local names = {}
-    for _, row in ipairs(ROSTER) do
+    for i = 1, MYTHIC_SIZE do
+        local row = ROSTER[i]
         if not skip[row[1]] then tinsert(names, row) end
     end
     for _, row in ipairs(ABSENT) do tinsert(names, row) end

@@ -100,6 +100,9 @@ ns.defaults = {
         conv = "oddeven",          -- "oddeven" | "split"
         halfNames = { L = "Left", R = "Right" },
         groupsMode = "auto",       -- "auto" | 4 | 6
+        sharedGroup = false,       -- 11-15 / 21-25 players: halves use full groups, the last one is split
+        announceOnApply = true,    -- post the assignments to raid chat after Apply
+        announceWhat = "shared",   -- "shared" (who in the shared group goes where) | "all" (also the halves)
         arrangeByHalf = true,
         sortMode = "role",         -- "role" | "class"
         scale = 1,
@@ -181,7 +184,8 @@ end
 
 local HELP = {
     "/fg - open or close the window",
-    "/fg demo - fill the board with a fake 20 player raid to try things out",
+    "/fg demo - fill the board with a fake 20 player Mythic raid to try things out",
+    "/fg demo 13 - a fake flex raid of 10 to 25 players",
     "/fg live - leave demo / planning and show the real raid",
     "/fg reset - reset the window position and size",
 }
@@ -192,7 +196,8 @@ SlashCmdList.FASTGROUPS = function(msg)
     msg = strlower(strtrim(msg or ""))
     if msg == "" then
         ns.Toggle()
-    elseif msg == "demo" then
+    elseif msg == "demo" or msg:match("^demo%s+%d+$") then
+        ns.Demo:SetSize(tonumber(msg:match("%d+")))
         ns.Board:SetSource("demo")
         ns.Show("groups")
     elseif msg == "live" then

@@ -5,7 +5,7 @@ local stub = require("wow_stub")
 local ns = {}
 local CORE = {
     "Core/Init.lua", "Core/Data.lua", "Core/Players.lua", "Core/Raid.lua", "Core/Board.lua",
-    "Core/Split.lua", "Core/Loadouts.lua", "Core/Rosters.lua", "Core/Apply.lua", "Core/Demo.lua",
+    "Core/Split.lua", "Core/Loadouts.lua", "Core/Rosters.lua", "Core/Apply.lua", "Core/Announce.lua", "Core/Demo.lua",
     "Core/Inspect.lua", "Core/SpecComm.lua", "Core/Serialize.lua", "Core/Comm.lua",
 }
 for _, path in ipairs(CORE) do
@@ -502,6 +502,223 @@ test("comm chunks, offer, accept and import", function()
     ns.Comm.OnMessage("FastGroups", "A\t" .. offer[2], "WHISPER", "Friend-Silvermoon")
     eq(#stub.sent, 1 + #chunks, "chunks sent")
     eq(stub.sent[2][3], "WHISPER")
+end)
+
+---------------------------------------------------------------------------
+-- Shared odd group
+---------------------------------------------------------------------------
+local function sharedDemo(n)
+    ns.settings.sharedGroup = true
+    ns.Demo:SetSize(n)
+    Board:SetSource("demo")
+end
+
+local function sharedDone()
+    ns.settings.sharedGroup = false
+    ns.settings.announceWhat = "shared"
+    ns.Demo:SetSize(nil)
+    Board:SetSource("demo")
+end
+
+test("odd k leaves the last group shared", function()
+    local L, R = Board.HalvesFor("oddeven", 3)
+    eq(table.concat(L, ","), "1")
+    eq(table.concat(R, ","), "2")
+    L, R = Board.HalvesFor("split", 5)
+    eq(table.concat(L, ","), "1,2")
+    eq(table.concat(R, ","), "3,4")
+    eq(Board.SharedOf(5), 5)
+    eq(Board.SharedOf(4), nil)
+    eq(Board.SideOfFor(3, "oddeven", 3), nil, "shared group has no side of its own")
+    -- past the end of a half -> shared, keeping the side; and back
+    local g, side = Board.Remap(3, "oddeven", 4, "oddeven", 3)
+    eq(g, 3) eq(side, "L")
+    g, side = Board.Remap(4, "oddeven", 4, "oddeven", 3)
+    eq(g, 3) eq(side, "R")
+    eq(Board.Remap(3, "oddeven", 3, "oddeven", 4, "L"), 3)
+    eq(Board.Remap(3, "oddeven", 3, "oddeven", 4, "R"), 4)
+    g, side = Board.Remap(5, "oddeven", 5, "split", 5, "R")
+    eq(g, 5) eq(side, "R")
+    eq(Board.Remap(1, "oddeven", 5, "split", 5), 1)
+    eq(Board.Remap(3, "oddeven", 5, "split", 5), 2)
+end)
+
+test("shared layout only for 11-15 and 21-25 outside Mythic", function()
+    sharedDemo(13)
+    eq(Board:K(), 3)
+    eq(Board:Shared(), 3)
+    sharedDemo(17)
+    eq(Board:K(), 4)
+    eq(Board:Shared(), nil)
+    sharedDemo(23)
+    eq(Board:K(), 5)
+    ns.settings.groupsMode = 6
+    eq(Board:K(), 5, "shared layout wins over a fixed count")
+    ns.settings.groupsMode = "auto"
+    sharedDemo(nil)
+    eq(#Board.members, 20)
+    eq(Board:K(), 4, "never on Mythic")
+    ns.settings.sharedGroup = false
+    ns.Demo:SetSize(13)
+    Board:SetSource("demo")
+    eq(Board:K(), 4, "off by default")
+    sharedDone()
+end)
+
+test("auto split fills the halves and splits the shared group", function()
+    for _, n in ipairs({ 11, 13, 15, 21, 23, 25 }) do
+        sharedDemo(n)
+        ns.Split.Run(Board)
+        local k, S = Board:K(), Board:Shared()
+        local L, R = Board:Halves()
+        for _, list in ipairs({ L, R }) do
+            for _, g in ipairs(list) do eq(Board:Occupancy(g), 5, n .. " players: group " .. g .. " full") end
+        end
+        eq(Board:Occupancy(S), n - (k - 1) * 5, n .. " players: shared group")
+        local cl, cr = Board:Counts("L"), Board:Counts("R")
+        eq(cl.n + cr.n, n, "everyone has a side")
+        assert(math.abs(cl.n - cr.n) <= 1, n .. " players: sizes " .. cl.n .. "/" .. cr.n)
+        assert(math.abs(cl.T - cr.T) <= 1 and math.abs(cl.H - cr.H) <= 1, n .. " players: roles")
+        for _, key in ipairs(Board.members) do
+            if Board.draft[key] == S then assert(Board.sides[key], key .. " has a side") end
+        end
+        ns.Apply:RunDemo()
+        eq(ns.Split.Run(Board), 0, n .. " players: second split moves nobody")
+    end
+    sharedDone()
+end)
+
+test("turning the shared group on and off keeps sides", function()
+    ns.Demo:SetSize(13)
+    Board:SetSource("demo")
+    ns.Split.Run(Board)
+    eq(Board:K(), 4)
+    local before = {}
+    for _, key in ipairs(Board.members) do before[key] = Board:PlayerSide(key) end
+    local groups = {}
+    for k, v in pairs(Board.draft) do groups[k] = v end
+    Board:SetShared(true)
+    eq(Board:K(), 3)
+    eq(Board:Occupancy(1), 5) eq(Board:Occupancy(2), 5) eq(Board:Occupancy(3), 3)
+    for _, key in ipairs(Board.members) do eq(Board:PlayerSide(key), before[key], key) end
+    Board:SetShared(false)
+    eq(Board:K(), 4)
+    for k, v in pairs(groups) do eq(Board.draft[k], v, k) end
+    sharedDone()
+end)
+
+test("moves, swaps and new players in the shared group", function()
+    sharedDemo(13)
+    ns.Split.Run(Board)
+    local inS = {}
+    Board:MembersOf(3, inS)
+    local a = inS[1]
+    local side = Board.sides[a]
+    local other = side == "L" and "R" or "L"
+    Board:Move(a, 3, other)
+    eq(Board.sides[a], other, "side change without a group move")
+    eq(Board:Pending(), select(1, Board:Pending()))
+    -- swap with someone in a full group: the newcomer takes the slot's side
+    local b = "Thalric-Silvermoon"
+    local gb = Board.draft[b]
+    Board:Swap(a, b)
+    eq(Board.draft[b], 3)
+    eq(Board.sides[b], other)
+    eq(Board.draft[a], gb)
+    -- someone moved in without a side gets one
+    Board:Move(b, 0)
+    Board.sides[b] = nil
+    Board:Move(b, 3)
+    assert(Board.sides[b], "side assigned")
+    sharedDone()
+end)
+
+test("loadouts keep the shared layout and sides", function()
+    sharedDemo(13)
+    ns.Split.Run(Board)
+    local sides, groups = {}, {}
+    for k, v in pairs(Board.sides) do if Board.draft[k] == 3 then sides[k] = v end end
+    for k, v in pairs(Board.draft) do groups[k] = v end
+    local lo = ns.Loadouts.SaveCurrent("Shared test")
+    eq(lo.k, 3)
+    for k, v in pairs(sides) do eq(lo.memory[k], v, k) end
+    wipe(Board.sides)
+    ns.Loadouts.Load(lo.id)
+    for k, v in pairs(groups) do eq(Board.draft[k], v, k) end
+    for k, v in pairs(sides) do eq(Board.sides[k], v, k) end
+    -- import keeps k = 3
+    local copy = ns.Loadouts.FromExport(ns.Loadouts.ToExport(lo))
+    eq(copy.k, 3)
+    -- loaded with the shared group off: shared players go to their half's last group
+    ns.settings.sharedGroup = false
+    Board:SetSource("demo")
+    ns.Loadouts.Load(lo.id)
+    eq(Board:K(), 4)
+    for k, v in pairs(sides) do eq(Board:PlayerSide(k), v, k) end
+    assert(occupancyOK())
+    ns.Loadouts.Delete(lo.id)
+    sharedDone()
+end)
+
+test("announce lines, demo print and raid chat after apply", function()
+    sharedDemo(13)
+    ns.Split.Run(Board)
+    local lines = ns.Announce.Lines()
+    eq(#lines, 1)
+    assert(lines[1]:find("^Group 3 is split %- Left: "), lines[1])
+    assert(lines[1]:find("; Right: "), lines[1])
+    ns.settings.announceWhat = "all"
+    lines = ns.Announce.Lines()
+    eq(#lines, 2)
+    eq(lines[1], "Halves - Left: group 1; Right: group 2")
+    ns.settings.halfNames.L = "Star|r"
+    assert(not ns.Announce.Lines()[1]:find("|", 1, true), "no escape codes")
+    ns.settings.halfNames.L = "Left"
+    -- demo prints instead of sending
+    stub.lastPrint = nil
+    ns.Apply:RunDemo()
+    assert(stub.lastPrint and stub.lastPrint:find("Demo, not sent"), "demo announce printed")
+    ns.settings.announceOnApply = false
+    stub.lastPrint = nil
+    ns.Apply:RunDemo()
+    eq(stub.lastPrint, nil, "no announce when turned off")
+    ns.settings.announceOnApply = true
+    -- nothing to say without a shared group in "shared" mode
+    ns.settings.announceWhat = "shared"
+    ns.settings.sharedGroup = false
+    Board:SetSource("demo")
+    eq(#ns.Announce.Lines(), 0)
+    eq(ns.Announce.Has(), false)
+    sharedDone()
+end)
+
+test("announce goes to raid chat on a live raid", function()
+    local roster = {}
+    for i = 1, 12 do roster[i] = { "P" .. i, math.floor((i - 1) / 5) + 1 } end
+    local saved = GetRaidRosterInfo
+    GetRaidRosterInfo = function(i)
+        local r = roster[i]
+        if r then return r[1], 0, r[2], 80, "MAGE", "MAGE", "", true, false, "", false, "DAMAGER" end
+    end
+    stub.inRaid = true
+    ns.settings.sharedGroup = true
+    Board:SetSource("live")
+    eq(Board:Shared(), 3)
+    stub.chat = {}
+    assert(ns.Announce.Send())
+    eq(#stub.chat, 1)
+    eq(stub.chat[1][2], "RAID")
+    assert(stub.chat[1][1]:find("^Group 3 is split"), stub.chat[1][1])
+    local lock = C_ChatInfo.InChatMessagingLockdown
+    C_ChatInfo.InChatMessagingLockdown = function() return true end
+    local ok, why = ns.Announce.Send()
+    eq(ok, false)
+    assert(why:find("locked"), why)
+    C_ChatInfo.InChatMessagingLockdown = lock
+    GetRaidRosterInfo = saved
+    stub.inRaid = false
+    ns.settings.sharedGroup = false
+    Board:SetSource("none")
 end)
 
 print(string.format("%d passed, %d failed", passed, failed))

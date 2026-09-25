@@ -93,8 +93,10 @@ C_SpecializationInfo = {
     GetInspectSpecialization = function() return 0 end,
 }
 
+stub.chat = {}          -- chat lines sent: { msg, chatType }
 C_ChatInfo = {
     RegisterAddonMessagePrefix = noop,
+    SendChatMessage = function(msg, chatType) table.insert(stub.chat, { msg, chatType }) end,
     InChatMessagingLockdown = function() return false end,
     SendAddonMessage = function(prefix, msg, chatType, target)
         table.insert(stub.sent, { prefix, msg, chatType, target })

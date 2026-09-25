@@ -11,7 +11,8 @@ local Board = {
     members = {},       -- array of keys on the board
     isMember = {},      -- key -> true
     draft = {},         -- key -> group (0 = unassigned tray)
-    ghosts = {},        -- array of { key, group } for absent loadout players
+    sides = {},         -- key -> "L" | "R", the own side of players in the shared group
+    ghosts = {},        -- array of { key, group, side } for absent loadout players
     subs = {},          -- key -> absent key this player replaces
     tags = {},          -- key -> "new" | "ret"
     lastLive = {},      -- key -> live group at the previous sync
@@ -40,19 +41,33 @@ function Board:Live()
 end
 
 function Board:IsMythic()
-    if self.source == "demo" then return true end
+    if self.source == "demo" then return ns.Demo.mythic end
     if self.source == "live" then return ns.Raid:IsMythic() end
     return false
 end
 
--- Number of groups the halves use.
+-- Shared odd group layout (opt-in). When the players fill an odd number of
+-- groups (11-15 or 21-25 players), the groups before the last one form the
+-- halves and the last one is shared: each of its players has an own side.
+-- An odd K stands for this layout; the shared group is group K.
+function Board:SharedK()
+    if not settings().sharedGroup or self:IsMythic() then return nil end
+    local m = math.ceil(#self.members / GROUP_SIZE)
+    if m == 3 or m == 5 then return m end
+    return nil
+end
+
+-- Number of groups the halves use, the shared group included.
 function Board:K()
+    local lo = self.source == "loadout" and ns.Loadouts.Find(self.sourceId)
+    if lo and lo.k and lo.k % 2 == 1 then return lo.k end
+    if not lo then
+        local sk = self:SharedK()
+        if sk then return sk end
+    end
     local mode = settings().groupsMode
     if mode == 4 or mode == 6 then return mode end
-    if self.source == "loadout" then
-        local lo = ns.Loadouts.Find(self.sourceId)
-        if lo and lo.k then return lo.k end
-    end
+    if lo and lo.k then return lo.k end
     if self:IsMythic() then return 4 end
     local n = #self.members
     if n == 0 then return 4 end
@@ -63,17 +78,19 @@ end
 
 local halvesCache = {}
 
--- Returns two arrays of group numbers for the left and right half.
+-- Returns two arrays of group numbers for the left and right half. An odd
+-- k leaves out its last group, which is shared.
 function Board.HalvesFor(conv, k)
     local id = conv .. k
     local h = halvesCache[id]
     if h then return h.L, h.R end
     h = { L = {}, R = {} }
-    for g = 1, k do
+    local n = k - k % 2
+    for g = 1, n do
         if conv == "oddeven" then
             if g % 2 == 1 then tinsert(h.L, g) else tinsert(h.R, g) end
         else
-            if g <= k / 2 then tinsert(h.L, g) else tinsert(h.R, g) end
+            if g <= n / 2 then tinsert(h.L, g) else tinsert(h.R, g) end
         end
     end
     halvesCache[id] = h
@@ -95,18 +112,54 @@ function Board:SideOf(g)
     return Board.SideOfFor(g, settings().conv, self:K())
 end
 
--- Map a group from one convention / size to another, keeping the side.
--- Returns 0 when the target layout has no matching group.
-function Board.Remap(g, fromConv, fromK, toConv, toK)
+-- The shared group of a layout with k groups, or nil.
+function Board.SharedOf(k)
+    if k % 2 == 1 then return k end
+    return nil
+end
+
+function Board:Shared()
+    return Board.SharedOf(self:K())
+end
+
+-- Side of a player: the half of their group, or their own side in the shared group.
+function Board:PlayerSide(key)
+    local g = self.draft[key]
+    if not g or g == 0 then return nil end
+    local k = self:K()
+    if g == Board.SharedOf(k) then return self.sides[key] end
+    return Board.SideOfFor(g, settings().conv, k)
+end
+
+function Board:GhostSide(gh)
+    if gh.group == self:Shared() then return gh.side end
+    return self:SideOf(gh.group)
+end
+
+-- Map a group from one layout to another, keeping the side. pside is the
+-- player's own side when g is the shared group. Returns the new group (0 when
+-- the target layout has no matching group) and, when that is the shared
+-- group, the side the player has there. Players past the end of a half go
+-- to the shared group; shared players go to the last group of their half.
+function Board.Remap(g, fromConv, fromK, toConv, toK, pside)
     if not g or g == 0 then return 0 end
+    local toShared = Board.SharedOf(toK)
     local side, idx = Board.SideOfFor(g, fromConv, fromK)
-    if not side then
-        if g > toK then return g end
-        return 0
-    end
     local L, R = Board.HalvesFor(toConv, toK)
+    if not side then
+        if g ~= Board.SharedOf(fromK) then
+            if g > toK then return g end
+            return 0
+        end
+        if toShared then return toShared, pside end
+        if not pside then return 0 end
+        local list = pside == "L" and L or R
+        return list[#list] or 0
+    end
     local list = side == "L" and L or R
-    return list[idx] or 0
+    if list[idx] then return list[idx] end
+    if toShared then return toShared, side end
+    return 0
 end
 
 ---------------------------------------------------------------------------
@@ -218,15 +271,17 @@ function Board:Counts(side)
     c.T, c.H, c.M, c.R, c.U, c.n, c.off = 0, 0, 0, 0, 0, 0, 0
     wipe(c.cls)
     local live = self:Live()
-    local L, R = self:Halves()
-    local groups = side == "L" and L or R
+    local conv, k = settings().conv, self:K()
+    local shared = Board.SharedOf(k)
     for _, key in ipairs(self.members) do
         local g = self.draft[key]
-        local inSide = false
-        for i = 1, #groups do
-            if groups[i] == g then inSide = true break end
+        local ps
+        if g == shared then
+            ps = self.sides[key]
+        elseif g and g > 0 then
+            ps = Board.SideOfFor(g, conv, k)
         end
-        if inSide then
+        if ps == side then
             local info = Players.Get(key)
             local b = info.bucket
             if b == "?" then c.U = c.U + 1 else c[b] = c[b] + 1 end
@@ -263,7 +318,25 @@ end
 ---------------------------------------------------------------------------
 -- Mutations
 ---------------------------------------------------------------------------
+-- Everyone in the shared group needs a side: newcomers get the half with
+-- fewer of their role, then fewer players.
+function Board:FixSides()
+    local shared = self:Shared()
+    if not shared then return end
+    for _, key in ipairs(self.members) do
+        if self.draft[key] == shared and not self.sides[key] then
+            local b = Players.Get(key).bucket
+            if b == "?" then b = "U" end
+            local cl, cr = self:Counts("L"), self:Counts("R")
+            local l, r = cl[b], cr[b]
+            if l == r then l, r = cl.n, cr.n end
+            self.sides[key] = l <= r and "L" or "R"
+        end
+    end
+end
+
 function Board:Changed()
+    self:FixSides()
     ns.Fire("BOARD_CHANGED")
 end
 
@@ -278,6 +351,7 @@ function Board:Clear()
     wipe(self.members)
     wipe(self.isMember)
     wipe(self.draft)
+    wipe(self.sides)
     wipe(self.lastLive)
     clearLoadState(self)
 end
@@ -297,6 +371,7 @@ function Board:RemoveMember(key)
         if self.members[i] == key then tremove(self.members, i) break end
     end
     self.draft[key] = nil
+    self.sides[key] = nil
     self.lastLive[key] = nil
     self.tags[key] = nil
     self.subs[key] = nil
@@ -329,8 +404,11 @@ function Board:SetSource(src, id)
         if lo then
             ns.Loadouts.SetHints(lo)
             local conv, k = settings().conv, lo.k or 4
+            local memory = lo.memory or {}
             for key, g in pairs(lo.groups) do
-                self:AddMember(key, Board.Remap(g, lo.conv or conv, lo.k or k, conv, k))
+                local g2, side = Board.Remap(g, lo.conv or conv, k, conv, k, memory[key])
+                self:AddMember(key, g2)
+                if side then self.sides[key] = side end
             end
             self.activeLoadout = lo.id
         end
@@ -382,11 +460,11 @@ function Board:Sync()
     for i = #self.members, 1, -1 do
         local key = self.members[i]
         if not live[key] then
-            local g = self.draft[key]
+            local g, side = self.draft[key], self.sides[key]
             local lo = self.loaded and self.loaded.lo
             self:RemoveMember(key)
             if lo and lo.groups[key] and g and g > 0 then
-                tinsert(self.ghosts, { key = key, group = g })
+                tinsert(self.ghosts, { key = key, group = g, side = side })
             end
         end
     end
@@ -406,20 +484,31 @@ function Board:Sync()
     self:Changed()
 end
 
--- Move a player to group g (0 = tray). Fails when the group is full.
-function Board:Move(key, g)
-    if self.draft[key] == g then return true end
+-- Move a player to group g (0 = tray). Fails when the group is full. side
+-- sets the player's own side when g is the shared group.
+function Board:Move(key, g, side)
+    local shared = side and g ~= 0 and g == self:Shared()
+    if self.draft[key] == g then
+        if shared and self.sides[key] ~= side then
+            self.sides[key] = side
+            self:Changed()
+        end
+        return true
+    end
     if g ~= 0 and self:Occupancy(g) >= GROUP_SIZE then
         return false, "full"
     end
     self.draft[key] = g
+    if shared then self.sides[key] = side end
     self:Changed()
     return true
 end
 
+-- Swap two players, their sides in the shared group included.
 function Board:Swap(a, b)
     local ga, gb = self.draft[a], self.draft[b]
     self.draft[a], self.draft[b] = gb, ga
+    self.sides[a], self.sides[b] = self.sides[b], self.sides[a]
     self:Changed()
 end
 
@@ -428,6 +517,7 @@ function Board:Substitute(key, ghostKey)
     for i, gh in ipairs(self.ghosts) do
         if gh.key == ghostKey then
             self.draft[key] = gh.group
+            if gh.side then self.sides[key] = gh.side end
             self.subs[key] = ghostKey
             tremove(self.ghosts, i)
             self:Changed()
@@ -437,13 +527,16 @@ function Board:Substitute(key, ghostKey)
     return false
 end
 
--- First group of a half with a free slot.
+-- First group of a half with a free slot, else the shared group. Move the
+-- player there with the side passed here.
 function Board:FreeGroupIn(side)
     local L, R = self:Halves()
     local list = side == "L" and L or R
     for _, g in ipairs(list) do
         if self:Occupancy(g) < GROUP_SIZE then return g end
     end
+    local shared = self:Shared()
+    if shared and self:Occupancy(shared) < GROUP_SIZE then return shared end
     return nil
 end
 
@@ -477,43 +570,78 @@ function Board:Revert()
     self:Changed()
 end
 
--- Switch split convention; everyone keeps their side.
-function Board:SetConvention(conv)
-    local s = settings()
-    if s.conv == conv then return end
-    local k = self:K()
-    for _, key in ipairs(self.members) do
-        local g = self.draft[key]
-        if g and g > 0 and g <= k then self.draft[key] = Board.Remap(g, s.conv, k, conv, k) end
-    end
-    for _, gh in ipairs(self.ghosts) do
-        if gh.group <= k then gh.group = Board.Remap(gh.group, s.conv, k, conv, k) end
-    end
-    s.conv = conv
-    self:Changed()
-end
-
--- Change how many groups the halves use; players keep their side.
-function Board:SetGroupsMode(mode)
-    local s = settings()
-    local oldK = self:K()
-    s.groupsMode = mode
-    local newK = self:K()
-    if oldK ~= newK then
-        local conv = s.conv
-        for _, key in ipairs(self.members) do
-            local g = self.draft[key]
-            if g and g > 0 and g <= oldK then self.draft[key] = Board.Remap(g, conv, oldK, conv, newK) end
-        end
+-- Remapping can put more than five into a group (a half's last group, or
+-- the shared group). Absent players who moved there leave first, then moved
+-- players go to the tray.
+local function settleOverflow(self, moved)
+    for g = 1, MAX_GROUPS do
+        local over = self:Occupancy(g) - GROUP_SIZE
         for i = #self.ghosts, 1, -1 do
             local gh = self.ghosts[i]
-            if gh.group <= oldK then
-                gh.group = Board.Remap(gh.group, conv, oldK, conv, newK)
-                if gh.group == 0 then tremove(self.ghosts, i) end
+            if over > 0 and gh.group == g and moved[gh] then
+                tremove(self.ghosts, i)
+                over = over - 1
+            end
+        end
+        for i = #self.members, 1, -1 do
+            local key = self.members[i]
+            if over > 0 and self.draft[key] == g and moved[key] then
+                self.draft[key] = 0
+                over = over - 1
             end
         end
     end
+end
+
+-- Move everyone from one layout to another, keeping their side.
+local movedTmp = {}
+local function remapAll(self, fromConv, fromK, toConv, toK)
+    wipe(movedTmp)
+    for _, key in ipairs(self.members) do
+        local g = self.draft[key]
+        if g and g > 0 and g <= fromK then
+            local g2, side = Board.Remap(g, fromConv, fromK, toConv, toK, self.sides[key])
+            self.draft[key] = g2
+            if side then self.sides[key] = side end
+            if g2 ~= g then movedTmp[key] = true end
+        end
+    end
+    for i = #self.ghosts, 1, -1 do
+        local gh = self.ghosts[i]
+        if gh.group <= fromK then
+            local g2, side = Board.Remap(gh.group, fromConv, fromK, toConv, toK, gh.side)
+            if g2 ~= gh.group then movedTmp[gh] = true end
+            gh.group, gh.side = g2, side
+            if g2 == 0 then tremove(self.ghosts, i) end
+        end
+    end
+    settleOverflow(self, movedTmp)
+end
+
+-- Change a layout setting; everyone keeps their side.
+local function relayout(self, change)
+    local s = settings()
+    local oldConv, oldK = s.conv, self:K()
+    change(s)
+    local newK = self:K()
+    if oldConv ~= s.conv or oldK ~= newK then remapAll(self, oldConv, oldK, s.conv, newK) end
     self:Changed()
+end
+
+-- Switch split convention.
+function Board:SetConvention(conv)
+    if settings().conv == conv then return end
+    relayout(self, function(s) s.conv = conv end)
+end
+
+-- Change how many groups the halves use.
+function Board:SetGroupsMode(mode)
+    relayout(self, function(s) s.groupsMode = mode end)
+end
+
+-- Turn the shared odd group layout on or off.
+function Board:SetShared(on)
+    relayout(self, function(s) s.sharedGroup = on and true or false end)
 end
 
 ---------------------------------------------------------------------------
@@ -532,14 +660,20 @@ function Board:ApplyLoadout(lo)
     local conv, k = settings().conv, self:K()
     clearLoadState(self)
     local present, absent, fresh, returning = 0, 0, 0, 0
+    local memory = lo.memory or {}
+    wipe(movedTmp)
     for key, g in pairs(lo.groups) do
-        local target = Board.Remap(g, lo.conv or conv, lo.k or k, conv, k)
+        local target, side = Board.Remap(g, lo.conv or conv, lo.k or k, conv, k, memory[key])
         if self.isMember[key] then
             present = present + 1
             self.draft[key] = target
+            if side then self.sides[key] = side end
+            movedTmp[key] = true
         elseif target > 0 then
             absent = absent + 1
-            tinsert(self.ghosts, { key = key, group = target })
+            local gh = { key = key, group = target, side = side }
+            tinsert(self.ghosts, gh)
+            movedTmp[gh] = true
         end
     end
     for _, key in ipairs(self.members) do
@@ -554,6 +688,7 @@ function Board:ApplyLoadout(lo)
             end
         end
     end
+    settleOverflow(self, movedTmp)
     self.loaded = { lo = lo, name = lo.name, present = present, absent = absent, fresh = fresh, returning = returning }
     self.activeLoadout = lo.id
     self:Changed()
@@ -586,12 +721,13 @@ function Board:AutoFill()
                 local score = 10
                 if ginfo.bucket == bucket then score = score + 20 end
                 if class and ginfo.class == class then score = score + 8 end
-                if want and self:SideOf(gh.group) == want then score = score + 40 end
+                if want and self:GhostSide(gh) == want then score = score + 40 end
                 if not bestScore or score > bestScore then best, bestScore = gh, score end
             end
         end
         if best then
             self.draft[key] = best.group
+            if best.side then self.sides[key] = best.side end
             self.subs[key] = best.key
             for i, gh in ipairs(self.ghosts) do
                 if gh == best then tremove(self.ghosts, i) break end
@@ -605,9 +741,15 @@ function Board:AutoFill()
             local b = info.bucket == "?" and "U" or info.bucket
             local L, R = self:Counts("L")[b], self:Counts("R")[b]
             local first = (memory and memory[key]) or (L <= R and "L" or "R")
-            local g = self:FreeGroupIn(first) or self:FreeGroupIn(first == "L" and "R" or "L")
+            local side = first
+            local g = self:FreeGroupIn(first)
+            if not g then
+                side = first == "L" and "R" or "L"
+                g = self:FreeGroupIn(side)
+            end
             if g then
                 self.draft[key] = g
+                if g == self:Shared() then self.sides[key] = side end
                 placed = placed + 1
             end
         end

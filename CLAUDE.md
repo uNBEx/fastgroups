@@ -29,7 +29,8 @@ Core/Split.lua          Split.Compute (pure, tested) + Split.Run(board)
 Core/Loadouts.lua       save/load/rename/duplicate/delete, export format + validation
 Core/Rosters.lua        planning rosters + guild roster scan
 Core/Apply.lua          Apply.NextMove (pure planner, tested) + event-driven driver
-Core/Demo.lua           /fg demo fake raid and sample loadout
+Core/Announce.lua       raid chat lines (shared group sides, optionally the halves), after Apply
+Core/Demo.lua           /fg demo fake raid (Mythic 20; /fg demo <10-25> for a flex raid) and sample loadout
 Core/Inspect.lua        paced inspect queue: unknown/changed specs, then ambiguous saved ones
 Core/SpecComm.lua       listens to LibSpecialization ("LibSpec") spec broadcasts from login
 Core/Serialize.lua      "!FG1!" + Base64(Deflate(CBOR(payload))) via C_EncodingUtil
@@ -52,6 +53,12 @@ tools/                  check.sh, deploy.sh, gen_media.py
   "Groups used: Auto" = 4 on Mythic, otherwise `2 * ceil(n / 10)` capped at 6.
 - Split conventions: odd/even (left = 1,3,5; right = 2,4,6) or low/high (left = 1-2 or 1-3).
   Loadouts store their convention and group count; loading remaps groups by (side, index).
+- Shared odd group (opt-in, `sharedGroup`): with 11-15 or 21-25 players outside Mythic the halves
+  use full groups and the last group is split, each of its players with an own side
+  (`Board.sides`). An odd K means this layout: groups 1..K-1 form the halves, group K is shared.
+  It wins over a fixed "Groups used". Loadouts store k = 3 or 5 and the sides in `memory`.
+  Remap sends players past the end of a half to the shared group and back to the half's last group.
+  Only the leader sees the sides, so Announce posts them to raid chat (after Apply or on click).
 - Balance priority per half: tanks, healers, melee, ranged, then classes (Demon Hunter and Monk
   weigh 3x because of their raid debuffs). Target for 2T/4H/14D is 1/2/7 per half.
 - Sort inside a group: tank, healer, melee, ranged, then name (or class).

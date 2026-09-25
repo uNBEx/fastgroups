@@ -24,6 +24,7 @@ Core\Split.lua
 Core\Loadouts.lua
 Core\Rosters.lua
 Core\Apply.lua
+Core\Announce.lua
 Core\Demo.lua
 Core\Inspect.lua
 Core\SpecComm.lua

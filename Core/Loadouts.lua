@@ -3,9 +3,10 @@
   {
     id, name, updated,
     conv = "oddeven" | "split",   -- convention the groups were saved with
-    k = 4 | 6,                    -- groups used by the halves when saved
+    k = 2..6,                     -- groups used when saved; odd = the last one is shared
     groups = { [key] = group },   -- everyone in the setup, absent players included
-    memory = { [key] = "L"|"R" }, -- last known side of everyone who ever was in it
+    memory = { [key] = "L"|"R" }, -- last known side of everyone who ever was in it; for
+                                  -- players in the shared group this is their own side
     info = { [key] = { c = class, s = specID } }, -- so others can show absent players
   }
 ]]
@@ -80,18 +81,20 @@ function Loadouts.SaveCurrent(name, overwriteId)
         for key, side in pairs(lo.memory) do memory[key] = side end
     end
     local groups, info = {}, {}
-    local function add(key, g)
+    local shared = board.SharedOf(k)
+    local function add(key, g, own)
         groups[key] = g
-        local side = board.SideOfFor(g, s.conv, k)
+        local side
+        if g == shared then side = own else side = board.SideOfFor(g, s.conv, k) end
         if side then memory[key] = side end
         local p = Players.Get(key)
         if p.class then info[key] = { c = p.class, s = p.spec } end
     end
     for _, key in ipairs(board.members) do
         local g = board.draft[key]
-        if g and g > 0 then add(key, g) end
+        if g and g > 0 then add(key, g, board.sides[key]) end
     end
-    for _, gh in ipairs(board.ghosts) do add(gh.key, gh.group) end
+    for _, gh in ipairs(board.ghosts) do add(gh.key, gh.group, gh.side) end
 
     if lo then
         lo.name = cleanName(name or lo.name)
@@ -172,7 +175,8 @@ function Loadouts.FromExport(t)
     local lo = {
         name = cleanName(type(t.n) == "string" and t.n or "Imported"),
         conv = (t.c == "split") and "split" or "oddeven",
-        k = (t.k == 2 or t.k == 4 or t.k == 6 or t.k == 8) and t.k or 4,
+        k = (type(t.k) == "number" and t.k >= 2 and t.k <= 6 and t.k == math.floor(t.k)) and t.k
+            or (t.k == 8 and 8) or 4,
         groups = {}, memory = {}, info = {},
     }
     local n = 0

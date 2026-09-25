@@ -108,6 +108,13 @@ local function fillCard(c, key, ghost)
     local info = Players.Get(key)
     local r, g, b = Data.ClassColor(info.class)
     c.key, c.ghost = key, ghost
+    local shared = Board:Shared()
+    if ghost then
+        local gh = Board:IsGhost(key)
+        c.sharedSide = gh and shared and gh.group == shared and gh.side or nil
+    else
+        c.sharedSide = shared and Board.draft[key] == shared and Board.sides[key] or nil
+    end
     local subtle = s.cardStyle == "subtle"
     local live = Board:Live()
     local m = not ghost and live and live[key]
@@ -245,6 +252,13 @@ local function fillCard(c, key, ghost)
         setTag(c, "NEW", { T.Accent() }, INK)
     elseif Board.tags[key] == "ret" then
         setTag(c, "BACK", T.C.ok, INK)
+    elseif not s.arrangeByHalf and c.sharedSide then
+        local side = c.sharedSide
+        if side == "L" then
+            setTag(c, strupper(s.halfNames.L), { T.Accent() }, INK)
+        else
+            setTag(c, strupper(s.halfNames.R), T.C.muted, INK)
+        end
     else
         setTag(c, nil)
     end
@@ -287,6 +301,10 @@ local function cardTooltip(c)
         end
         if m and T.RANK_ICON[m.rank] then
             GameTooltip:AddLine(m.rank == 2 and "Raid leader" or "Assistant", T.Color("gold"))
+        end
+        if c.sharedSide then
+            GameTooltip:AddLine("Group " .. Board:Shared() .. " is shared: plays with the "
+                .. ns.settings.halfNames[c.sharedSide] .. " half", T.Accent())
         end
         if m and not m.online then GameTooltip:AddLine("Offline", 0.6, 0.6, 0.6) end
         if Board.subs[c.key] then
@@ -345,7 +363,7 @@ local function findDropTarget()
     end
     for _, col in ipairs(Page.columns) do
         if col:IsVisible() and col:IsMouseOver() then
-            return { group = col.group }
+            return { group = col.group, side = col.side }
         end
     end
     if Page.tray:IsVisible() and Page.tray:IsMouseOver() then
@@ -374,8 +392,8 @@ local function onCardDragStop(c)
             else
                 Board:Swap(key, t.key)
             end
-        elseif target.group ~= Board.draft[key] then
-            local ok = Board:Move(key, target.group)
+        elseif target.group ~= Board.draft[key] or target.side then
+            local ok = Board:Move(key, target.group, target.side)
             if not ok then
                 UI.Toast("Group " .. target.group .. " is full. Drop onto a player to swap.", "warn")
             end
@@ -459,13 +477,15 @@ local function cardMenu(c)
             pos:CreateRadio("Ranged", function() return cur == "R" end, function() Players.SetPos(key, "R") Board:Changed() end)
         end
         root:CreateDivider()
-        local side = Board:SideOf(Board.draft[key] or 0)
+        local side = Board:PlayerSide(key)
         if side then
             local other = side == "L" and "R" or "L"
+            local shared = Board:Shared()
             root:CreateButton("Move to " .. ns.settings.halfNames[other], function()
-                local g = Board:FreeGroupIn(other)
+                -- in the shared group only the side changes, nobody moves
+                local g = Board.draft[key] == shared and shared or Board:FreeGroupIn(other)
                 if g then
-                    Board:Move(key, g)
+                    Board:Move(key, g, other)
                 else
                     UI.Toast("The " .. ns.settings.halfNames[other] .. " half is full. Drag onto a player there to swap.", "warn")
                 end
@@ -562,7 +582,6 @@ local function createColumn(parent, g)
     W.Skin(col, "win", "line")
     col.title = W.Text(col, 11, "semibold", "text")
     col.title:SetPoint("TOPLEFT", COL_PAD + 3, -COL_PAD - 3)
-    col.title:SetText("Group " .. g)
     col.cap = W.Text(col, 10.5, "regular", "dim")
     col.cap:SetPoint("TOPRIGHT", -COL_PAD - 3, -COL_PAD - 3)
     col.sideTag = CreateFrame("Frame", nil, col)
@@ -597,17 +616,46 @@ local function createColumn(parent, g)
     return col
 end
 
--- Fill a column with its cards.
+local function keepSide(list, side, ghosts)
+    for i = #list, 1, -1 do
+        local s
+        if ghosts then
+            local gh = Board:IsGhost(list[i])
+            s = gh and gh.side
+        else
+            s = Board.sides[list[i]]
+        end
+        if s ~= side then tremove(list, i) end
+    end
+end
+
+-- Fill a column with its cards. col.side marks one half's part of the
+-- shared group: it shows that side's players and the group's free slots.
 local function fillColumn(col, width)
     local g = col.group
     col:SetWidth(width)
+    col.title:SetText("Group " .. g)
     Board:MembersOf(g, tmpKeys)
     Board:GhostsOf(g, tmpGhosts)
     local n = #tmpKeys + #tmpGhosts
     col.cap:SetText(n .. "/5")
     col.cap:SetTextColor(T.Color(n > 5 and "danger" or "dim"))
+    local shared = g == Board:Shared()
+    local slots = 5
+    if col.side then
+        keepSide(tmpKeys, col.side, false)
+        keepSide(tmpGhosts, col.side, true)
+        slots = #tmpKeys + #tmpGhosts + math.max(0, 5 - n)
+    end
     local side = Board:SideOf(g)
-    if not ns.settings.arrangeByHalf and side then
+    if shared then
+        col.sideTag.text:SetText("SHARED")
+        local r, gg, b = T.Accent()
+        col.sideTag.bg:SetVertexColor(r, gg, b, 0.22)
+        col.sideTag.text:SetTextColor(r, gg, b)
+        col.sideTag:SetWidth(col.sideTag.text:GetUnboundedStringWidth() + 10)
+        col.sideTag:Show()
+    elseif not ns.settings.arrangeByHalf and side then
         local name = ns.settings.halfNames[side]
         col.sideTag.text:SetText(strupper(name))
         if side == "L" then
@@ -623,11 +671,16 @@ local function fillColumn(col, width)
     else
         col.sideTag:Hide()
     end
-    -- members first by role, ghosts merged in role order
+    -- members first by role, ghosts merged in role order; the shared group
+    -- in one column lists the left side first
     local list = {}
-    for _, k in ipairs(tmpKeys) do list[#list + 1] = { k, false } end
-    for _, k in ipairs(tmpGhosts) do list[#list + 1] = { k, true } end
+    for _, k in ipairs(tmpKeys) do list[#list + 1] = { k, false, Board.sides[k] } end
+    for _, k in ipairs(tmpGhosts) do
+        local gh = Board:IsGhost(k)
+        list[#list + 1] = { k, true, gh and gh.side }
+    end
     table.sort(list, function(a, b)
+        if shared and not col.side and a[3] ~= b[3] then return (a[3] or "Z") < (b[3] or "Z") end
         local oa, ob = Data.ROLE_ORDER[Players.Get(a[1]).bucket], Data.ROLE_ORDER[Players.Get(b[1]).bucket]
         if oa ~= ob then return oa < ob end
         if a[2] ~= b[2] then return b[2] end
@@ -642,7 +695,7 @@ local function fillColumn(col, width)
             fillCard(c, item[1], item[2])
             c:SetAllPoints(slot)
         else
-            slot.ring:Show()
+            slot.ring:SetShown(i <= slots)
         end
     end
     -- more than 5 (only possible while the live raid disagrees): stack the rest
@@ -851,6 +904,12 @@ function Page:Build(f)
         function() return ns.settings.groupsMode end,
         function(v) Board:SetGroupsMode(v) end)
     self.groups:SetPoint("LEFT", self.conv, "RIGHT", 6, 0)
+    -- stands in for the groups control while the shared odd group layout is active
+    self.sharedBtn = W.Button(tb, { text = "", height = 28, weight = "regular",
+        onClick = function() UI.ShowPage("options") end,
+        tooltip = function(b) W.Tooltip(b, "Shared odd group", b.tip) end })
+    self.sharedBtn:SetPoint("LEFT", self.conv, "RIGHT", 6, 0)
+    self.sharedBtn:Hide()
 
     self.apply = W.Button(tb, { text = "Apply", icon = "play", kind = "primary", height = 28, onClick = function() Page:OnApply() end })
     self.apply:SetPoint("RIGHT", -PAD, 0)
@@ -859,6 +918,14 @@ function Page:Build(f)
     self.save = W.Button(tb, { text = "Save", icon = "save", height = 28, onClick = function() UI.SaveDialog() end,
         tooltip = "Save the board as a loadout." })
     self.revert = W.IconButton(tb, "undo", 28, "Revert: throw away changes and show the live raid", function() Board:Revert() end)
+    self.announce = W.IconButton(tb, "send", 28, "Announce the assignments in raid chat", function()
+        local ok, reason = ns.Announce.Send()
+        if not ok then
+            UI.Toast(reason == "empty" and "Nothing to announce." or reason, "warn")
+        elseif Board.source == "live" then
+            UI.Toast("Announced in raid chat.", "ok")
+        end
+    end)
     self.split = W.Button(tb, { text = "Auto-split", icon = "wand", height = 28, onClick = function()
         local n = ns.Split.Run(Board)
         if Board:IsLiveLike() then
@@ -941,6 +1008,14 @@ function Page:Build(f)
 
     self.columns = {}
     for g = 1, 8 do self.columns[g] = createColumn(content, g) end
+    -- each half's part of the shared group (columns 9 and 10)
+    self.sharedCols = {}
+    for i, side in ipairs({ "L", "R" }) do
+        local col = createColumn(content, 0)
+        col.side = side
+        self.sharedCols[side] = col
+        self.columns[8 + i] = col
+    end
     Page.columns = self.columns
 
     -- tray
@@ -1027,15 +1102,28 @@ function Page:RefreshToolbar()
     self.sourceBtn.chev:SetPoint("RIGHT", -10, 0)
 
     local L, R = Board.HalvesFor("split", k)
+    local function range(list) return #list == 1 and tostring(list[1]) or (list[1] .. "-" .. list[#list]) end
     self.conv:SetItems({
         { "oddeven", "Odd / Even", "Left half = odd groups, right half = even groups." },
-        { "split", L[1] .. "-" .. L[#L] .. " / " .. R[1] .. "-" .. R[#R], "Left half = low groups, right half = high groups." },
+        { "split", range(L) .. " / " .. range(R), "Left half = low groups, right half = high groups." },
     })
-    local autoK = ns.settings.groupsMode == "auto" and k or nil
-    self.groups:SetItems({
-        { "auto", autoK and ("Auto " .. autoK) or "Auto", "Mythic uses groups 1-4; other raids by size." },
-        { 4, "4" }, { 6, "6" },
-    })
+    local shared = Board:Shared()
+    local groupsCtl = self.groups
+    if shared then
+        self.groups:Hide()
+        self.sharedBtn:SetLabel("Group " .. shared .. " shared")
+        self.sharedBtn.tip = { "Groups " .. range(L) .. " and " .. range(R) .. " are the halves; group " .. shared
+            .. " is split between them and each of its players has an own side.",
+            "Change this under Options > Groups." }
+        groupsCtl = self.sharedBtn
+    else
+        self.sharedBtn:Hide()
+        local autoK = ns.settings.groupsMode == "auto" and k or nil
+        self.groups:SetItems({
+            { "auto", autoK and ("Auto " .. autoK) or "Auto", "Mythic uses groups 1-4; other raids by size." },
+            { 4, "4" }, { 6, "6" },
+        })
+    end
 
     -- right side, right to left
     local running = apply.running
@@ -1074,6 +1162,16 @@ function Page:RefreshToolbar()
     else
         self.revert:Hide()
     end
+    local announce = live and ns.Announce.Has(Board)
+    if announce then
+        self.announce:Show()
+        self.announce:ClearAllPoints()
+        self.announce:SetPoint("RIGHT", anchor, "LEFT", -4, 0)
+        self.announce:SetDisabled(running)
+        anchor = self.announce
+    else
+        self.announce:Hide()
+    end
     self.split:ClearAllPoints()
     self.split:SetPoint("RIGHT", anchor, "LEFT", -6, 0)
     self.split:SetDisabled(none or running or #Board.members == 0)
@@ -1109,7 +1207,7 @@ function Page:RefreshToolbar()
         self.chip:SetWidth(math.floor(8 + 13 + 5 + self.chip.text:GetUnboundedStringWidth() + 10))
     end
 
-    local conv, groupsSeg = self.conv, self.groups
+    local conv, groupsSeg = self.conv, groupsCtl
     conv:SetShown(not none)
     groupsSeg:SetShown(not none)
 
@@ -1118,16 +1216,19 @@ function Page:RefreshToolbar()
     -- previous refresh or on rects that are not resolved yet during a resize.
     self.split:SetLabel("Auto-split")
     self.save:SetLabel("Save")
+    if shared then self.sharedBtn:SetLabel("Group " .. shared .. " shared") end
     local leftW = PAD + self.sourceBtn:GetWidth()
     if not none then leftW = leftW + 6 + conv:GetWidth() + 6 + groupsSeg:GetWidth() end
     local rightW = PAD + self.apply:GetWidth() + (running and 4 + self.stop:GetWidth() or 0)
         + 6 + self.save:GetWidth() + (live and 4 + self.revert:GetWidth() or 0)
+        + (announce and 4 + self.announce:GetWidth() or 0)
         + 6 + self.split:GetWidth() + (self.chip:IsShown() and 6 + self.chip:GetWidth() or 0)
     local tbW = self.toolbar:GetWidth()
     if tbW < 50 then tbW = self.f:GetWidth() end
     if leftW + 8 + rightW > tbW then
         self.split:SetLabel("")
         self.save:SetLabel("")
+        if shared then self.sharedBtn:SetLabel("Shared") end
     end
 end
 
@@ -1273,6 +1374,7 @@ function Page:LayoutHalves(width, y)
     local s = ns.settings
     local k = Board:K()
     local L, R = Board:Halves()
+    local shared = Board:Shared()
     local counterW
     if s.arrangeByHalf then
         self.single:Hide()
@@ -1286,11 +1388,22 @@ function Page:LayoutHalves(width, y)
             h:SetSize(halfW, hh)
             h.name:SetText(strupper(s.halfNames[side]))
             if side == "L" then h.sw:SetVertexColor(T.Accent()) else h.sw:SetVertexColor(T.Color("muted")) end
-            h.meta:SetText("Groups " .. table.concat(groups, ", ") .. "  -  " .. Board:Counts(side).n .. " players")
+            local meta = (#groups == 1 and "Group " or "Groups ") .. table.concat(groups, ", ")
             local nc = #groups
+            local sc = shared and self.sharedCols[side]
+            if sc then
+                sc.group = shared
+                nc = nc + 1
+                local own = 0
+                for _, key in ipairs(Board.members) do
+                    if Board.draft[key] == shared and Board.sides[key] == side then own = own + 1 end
+                end
+                if own > 0 then meta = meta .. " + " .. own .. " of group " .. shared end
+            end
+            h.meta:SetText(meta .. "  -  " .. Board:Counts(side).n .. " players")
             local colW = math.floor((halfW - 2 * HALF_PAD - (nc - 1) * 6) / nc)
-            for j, g in ipairs(groups) do
-                local col = self.columns[g]
+            for j = 1, nc do
+                local col = j <= #groups and self.columns[groups[j]] or sc
                 col:SetParent(h)
                 col:SetFrameLevel(h:GetFrameLevel() + 1)
                 col:ClearAllPoints()

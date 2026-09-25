@@ -92,6 +92,7 @@ function Page:Build(f)
     title:SetPoint("LEFT", PAD, 0)
     local reset = W.Button(tb, { text = "Reset to defaults", icon = "undo", kind = "ghost", onClick = function()
         UI.Confirm("Reset all options?", "Loadouts, rosters and known players are kept; only the options go back to their defaults.", "Reset", function()
+            if s().sharedGroup then Board:SetShared(false) end
             local keep = { window = s().window }
             local fresh = ns.CopyTable(ns.defaults.settings)
             fresh.window = keep.window
@@ -190,6 +191,11 @@ function Page:Build(f)
     grp:AddRow("Half names", "Shown above the halves", names)
     grp:AddRow("Groups used", "Auto: 4 on Mythic, otherwise by raid size",
         seg({ { "auto", "Auto" }, { 4, "4" }, { 6, "6" } }, "groupsMode", function(v) Board:SetGroupsMode(v) end))
+    grp:AddRow("Share the odd group", "11-15 or 21-25 players: full groups per half, the last one split",
+        W.Toggle(UIParent, function() return s().sharedGroup end, function(v)
+            Board:SetShared(v)
+            ns.Fire("SETTINGS_CHANGED", "sharedGroup")
+        end))
     grp:AddRow("Arrange columns by half", "Off: groups in order with side tags", toggle("arrangeByHalf"))
     grp:AddRow("Sort inside a group", "Always tanks, healers, melee, ranged first",
         seg({ { "role", "Then name" }, { "class", "Then class" } }, "sortMode"))
@@ -205,6 +211,13 @@ function Page:Build(f)
         end))
     beh:AddRow("Remember sides in loadouts", "Auto-fill sends returning players to their old half", toggle("rememberSides"))
     self.beh = beh
+
+    -- Announcements
+    local ann = newBox(c, "Announcements", "Raid chat lines from you, so players know their half.")
+    ann:AddRow("Announce after Apply", "Posts when all moves are done", toggle("announceOnApply"))
+    ann:AddRow("What to announce", "All: also which groups form each half",
+        seg({ { "shared", "Shared group" }, { "all", "All groups" } }, "announceWhat"))
+    self.ann = ann
 
     -- Sharing
     local sh = newBox(c, "Sharing", "In-game transfers between FastGroups users.")
@@ -247,6 +260,7 @@ function Page:Refresh()
     end
     local y1 = place(self.app, 0, 0)
     y1 = place(self.beh, 0, y1)
+    y1 = place(self.ann, 0, y1)
     local y2 = place(self.grp, colW + 14, 0)
     y2 = place(self.sh, colW + 14, y2)
     self.scroll.child:SetHeight(math.max(y1, y2))

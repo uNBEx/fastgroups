@@ -7,7 +7,7 @@ local M = require("ui_mock")
 local ns = {}
 local FILES = {
     "Core/Init.lua", "Core/Data.lua", "Core/Players.lua", "Core/Raid.lua", "Core/Board.lua",
-    "Core/Split.lua", "Core/Loadouts.lua", "Core/Rosters.lua", "Core/Apply.lua", "Core/Demo.lua",
+    "Core/Split.lua", "Core/Loadouts.lua", "Core/Rosters.lua", "Core/Apply.lua", "Core/Announce.lua", "Core/Demo.lua",
     "Core/Inspect.lua", "Core/SpecComm.lua", "Core/Serialize.lua", "Core/Comm.lua",
     "UI/Theme.lua", "UI/Widgets.lua", "UI/Main.lua", "UI/GroupsPage.lua", "UI/RostersPage.lua",
     "UI/SharePage.lua", "UI/OptionsPage.lua", "UI/Minimap.lua",
@@ -321,6 +321,54 @@ step("fuzz", function()
     Board:SetSource("demo")
     for _, p in ipairs({ "groups", "rosters", "share", "options" }) do fuzz(p) end
     for msg in pairs(fuzzErrors) do print("FUZZ " .. msg) failures = failures + 1 end
+end)
+
+step("shared odd group board", function()
+    UI.ShowPage("groups")
+    Board:SetShared(true)
+    SlashCmdList.FASTGROUPS("demo 13")
+    check(#Board.members == 13, "13 player demo")
+    groups.split.scripts.OnClick(groups.split, "LeftButton")
+    check(Board:Shared() == 3, "group 3 shared")
+    check(#groups.activeCards == 13, "cards: " .. #groups.activeCards)
+    local sl, sr = groups.sharedCols.L, groups.sharedCols.R
+    check(sl:IsVisible() and sr:IsVisible(), "both parts of the shared group shown")
+    check(not groups.groups:IsShown() and groups.sharedBtn:IsShown(), "shared button replaces the groups control")
+    check(groups.announce:IsShown(), "announce button")
+    -- drag a shared player to the other half's part: only the side changes
+    local key
+    for _, k in ipairs(Board.members) do
+        if Board.draft[k] == 3 and Board.sides[k] == "L" then key = k end
+    end
+    check(key, "someone on the left in the shared group")
+    local c = cardFor(key)
+    c.scripts.OnDragStart(c)
+    sr._mouseOver = true
+    c.scripts.OnDragStop(c)
+    sr._mouseOver = false
+    check(Board.draft[key] == 3 and Board.sides[key] == "R", "side changed")
+    -- the card menu moves them back without a group move
+    c = cardFor(key)
+    c.scripts.OnClick(c, "RightButton")
+    for _, e in ipairs(ns.W.menuRoot.children) do
+        if e.text == "Move to Left" then e.fn() end
+    end
+    check(Board.draft[key] == 3 and Board.sides[key] == "L", "side changed back")
+    stub.lastPrint = nil
+    groups.announce.scripts.OnClick(groups.announce, "LeftButton")
+    check(stub.lastPrint and stub.lastPrint:find("Group 3 is split"), "announced: " .. tostring(stub.lastPrint))
+    -- columns in group order: side tags on the shared cards
+    ns.settings.arrangeByHalf = false
+    groups:Refresh()
+    c = cardFor(key)
+    check(c.tag:IsShown() and c.tag.text._text == "LEFT", "side tag on shared card")
+    fuzz("groups")
+    ns.settings.arrangeByHalf = true
+    fuzz("groups")
+    for msg in pairs(fuzzErrors) do print("FUZZ " .. msg) failures = failures + 1 end
+    Board:SetShared(false)
+    SlashCmdList.FASTGROUPS("demo")
+    check(#Board.members == 20 and Board:K() == 4, "back to the Mythic demo")
 end)
 
 step("close window unregisters events", function()
