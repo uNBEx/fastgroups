@@ -17,7 +17,7 @@ hidden addon comms). Only the person arranging groups needs it installed.
 ```
 FastGroups.toc          load order; Interface 120100; SavedVariables FastGroupsDB
 Libs/                   LibStub, CallbackHandler-1.0, LibDataBroker-1.1, LibDBIcon-1.0
-Media/                  TGA textures (Icons/, round6, ring6, round3, circle) + Inter fonts
+Media/                  TGA textures (Icons/, round6, ring6, round3, circle, square, ring0) + Inter fonts
 Core/Init.lua           namespace, event dispatcher (ns.RegisterEvent per owner), messages
                         (ns.On / ns.Fire), DB defaults, slash commands, compartment globals
 Core/Data.lua           spec table (specID -> class, role, melee), class lists, colors

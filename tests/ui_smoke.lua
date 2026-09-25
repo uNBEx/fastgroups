@@ -219,6 +219,36 @@ step("options page", function()
     UI.pages.options:Refresh()
 end)
 
+step("corner style switches in place", function()
+    local shaped, dots = {}, {}
+    local function walk(f)
+        for _, r in ipairs({ f:GetRegions() }) do
+            if r.fgShape then shaped[#shaped + 1] = r end
+            local tex = r:GetTexture()
+            if type(tex) == "string" and tex:find("circle$") and not r.fgShape then dots[#dots + 1] = r end
+        end
+        for _, c in ipairs({ f:GetChildren() }) do walk(c) end
+    end
+    walk(UI.Frame())
+    check(#shaped > 50 and #dots > 0, "shaped " .. #shaped .. ", dots " .. #dots)
+    check(ns.settings.squareCorners == true, "square by default")
+    for _, r in ipairs(shaped) do
+        check(r:GetTexture():find("square$") or r:GetTexture():find("ring0$"), "square: " .. r.fgShape)
+    end
+    ns.settings.squareCorners = false
+    ns.W.RefreshShapes()
+    for _, r in ipairs(shaped) do
+        local tex = r:GetTexture()
+        check(not tex:find("square$") and not tex:find("ring0$"), "rounded: " .. r.fgShape)
+    end
+    for _, r in ipairs(dots) do check(r:GetTexture():find("circle$"), "dots stay circles") end
+    ns.settings.squareCorners = true
+    ns.W.RefreshShapes()
+    for _, r in ipairs(shaped) do
+        check(r:GetTexture():find("square$") or r:GetTexture():find("ring0$"), "square again: " .. r.fgShape)
+    end
+end)
+
 step("incoming offer popup", function()
     ns.Comm.OnMessage("FastGroups", "O\tab12\t2\t1 loadout", "RAID", "Stranger-Silvermoon")
     check(stub.popup and stub.popup.which == "FASTGROUPS_OFFER", "popup shown")

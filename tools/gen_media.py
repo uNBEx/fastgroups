@@ -99,6 +99,14 @@ def supersampled(size, draw_fn, ss=8):
     return img
 
 
+def crisp(size, draw_fn):
+    mask = Image.new("L", (size, size), 0)
+    draw_fn(ImageDraw.Draw(mask), size)
+    img = Image.new("RGBA", (size, size), (255, 255, 255, 0))
+    img.putalpha(mask)
+    return img
+
+
 def shapes():
     res = {}
     # rounded fill, radius 6 in a 32px texture, sliced with 8px margins
@@ -111,6 +119,13 @@ def shapes():
     # small radius variants for pills and tiny badges
     res["round3"] = supersampled(16, lambda d, s, k: d.rounded_rectangle([0, 0, s - 1, s - 1], radius=3 * k, fill=255))
     res["circle"] = supersampled(32, lambda d, s, k: d.ellipse([0, 0, s - 1, s - 1], fill=255))
+    # square corner variants, same size and slice margins as round6 / ring6. Drawn at 1x:
+    # straight edges need no anti-aliasing and downsampling would blur the 1px ring.
+    res["square"] = crisp(32, lambda d, s: d.rectangle([0, 0, s - 1, s - 1], fill=255))
+    def ring0(d, s):
+        d.rectangle([0, 0, s - 1, s - 1], fill=255)
+        d.rectangle([1, 1, s - 2, s - 2], fill=0)
+    res["ring0"] = crisp(32, ring0)
     return res
 
 

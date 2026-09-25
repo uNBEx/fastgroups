@@ -95,6 +95,7 @@ ns.defaults = {
     settings = {
         accent = { 0.353, 0.784, 0.980 },
         cardStyle = "filled",      -- "filled" | "subtle"
+        squareCorners = true,
         showSpec = true,
         conv = "oddeven",          -- "oddeven" | "split"
         halfNames = { L = "Left", R = "Right" },

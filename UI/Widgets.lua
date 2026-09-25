@@ -1,4 +1,4 @@
--- Small widget toolkit in the FastGroups style: flat, rounded, dark.
+-- Small widget toolkit in the FastGroups style: flat, dark, square or rounded corners.
 local _, ns = ...
 
 local T = ns.T
@@ -9,19 +9,59 @@ ns.W = W
 ---------------------------------------------------------------------------
 -- Primitives
 ---------------------------------------------------------------------------
-local SLICE = { round = 8, ring = 8, round3 = 4 }
+-- Shapes that follow the "Square corners" option.
+-- kind = { rounded texture, square texture, slice margin, tex coords }
+local SHAPES = {
+    round = { "round", "square", 8 },         -- fill
+    ring = { "ring", "ring0", 8 },            -- 1px border
+    round3 = { "round3", "square", 4 },       -- small radius for pills and badges
+    knob = { "circle", "square" },            -- switch knob, slider thumb
+    capTop = { "circle", "square", nil, { 0, 1, 0, 0.5 } },   -- scroll bar ends
+    capBottom = { "circle", "square", nil, { 0, 1, 0.5, 1 } },
+    corner = { "round", "square", nil, { 0, 0.5, 0.5, 1 } },  -- one bottom-left corner
+}
 
--- A nine-sliced rounded texture. kind: "round" (fill), "ring" (1px border), "round3".
-function W.Round(parent, layer, kind, r, g, b, a, sub)
-    local t = parent:CreateTexture(nil, layer or "BACKGROUND", nil, sub or 0)
-    t:SetTexture(T.TEX[kind or "round"])
-    local m = SLICE[kind or "round"]
+-- Sets (or resets after the option changed) the texture of a shaped region.
+function W.SetShape(t, kind)
+    local s = SHAPES[kind]
+    t.fgShape = kind
+    t:SetTexture(T.TEX[s[ns.settings.squareCorners and 2 or 1]])
+    local m = s[3]
     if m then
         t:SetTextureSliceMargins(m, m, m, m)
         t:SetTextureSliceMode(Enum.UITextureSliceMode and Enum.UITextureSliceMode.Stretched or 0)
     end
+    local c = s[4]
+    if c then t:SetTexCoord(c[1], c[2], c[3], c[4]) end
+end
+
+-- A shaped texture, nine-sliced when the kind has a margin. kind: see SHAPES.
+function W.Round(parent, layer, kind, r, g, b, a, sub)
+    local t = parent:CreateTexture(nil, layer or "BACKGROUND", nil, sub or 0)
+    W.SetShape(t, kind or "round")
     t:SetVertexColor(r or 1, g or 1, b or 1, a or 1)
     return t
+end
+
+-- Top level frames holding shaped regions. W.RefreshShapes walks them only when
+-- the option changes; nothing is tracked per texture.
+local shapeRoots = {}
+function W.AddShapeRoot(f)
+    shapeRoots[#shapeRoots + 1] = f
+end
+
+local function reshape(f)
+    local regions = { f:GetRegions() }
+    for i = 1, #regions do
+        local kind = regions[i].fgShape
+        if kind then W.SetShape(regions[i], kind) end
+    end
+    local children = { f:GetChildren() }
+    for i = 1, #children do reshape(children[i]) end
+end
+
+function W.RefreshShapes()
+    for i = 1, #shapeRoots do reshape(shapeRoots[i]) end
 end
 
 function W.Rect(parent, layer, r, g, b, a, sub)
@@ -329,8 +369,7 @@ function W.Toggle(parent, get, set)
     b:SetSize(34, 20)
     b.track = W.Round(b, "BACKGROUND", "round")
     b.track:SetAllPoints()
-    b.knob = b:CreateTexture(nil, "ARTWORK")
-    b.knob:SetTexture(T.TEX.circle)
+    b.knob = W.Round(b, "ARTWORK", "knob")
     b.knob:SetSize(14, 14)
     function b:Refresh()
         local on = get()
@@ -411,7 +450,7 @@ end
 
 -- A vertical Slider on the right of the scroll frame. The Slider does the
 -- dragging; its thumb is an invisible hit area and the visible bar is a thin
--- capsule drawn from two half circles and a rect.
+-- capsule drawn from two half circles (or squares) and a rect.
 local function attachScrollBar(sf, parent)
     local bar = CreateFrame("Slider", nil, parent)
     bar:SetWidth(8)
@@ -423,13 +462,9 @@ local function attachScrollBar(sf, parent)
     thumb:SetColorTexture(0, 0, 0, 0)
     thumb:SetSize(8, 24)
     bar:SetThumbTexture(thumb)
-    bar.top = bar:CreateTexture(nil, "OVERLAY")
-    bar.top:SetTexture(T.TEX.circle)
-    bar.top:SetTexCoord(0, 1, 0, 0.5)
+    bar.top = W.Round(bar, "OVERLAY", "capTop")
     bar.top:SetPoint("TOP", thumb, "TOP")
-    bar.bottom = bar:CreateTexture(nil, "OVERLAY")
-    bar.bottom:SetTexture(T.TEX.circle)
-    bar.bottom:SetTexCoord(0, 1, 0.5, 1)
+    bar.bottom = W.Round(bar, "OVERLAY", "capBottom")
     bar.bottom:SetPoint("BOTTOM", thumb, "BOTTOM")
     bar.mid = W.Rect(bar, "OVERLAY", 1, 1, 1, 1)
     bar.mid:SetPoint("TOP", bar.top, "BOTTOM")
@@ -596,8 +631,7 @@ function W.Slider(parent, width, minV, maxV, step, get, onChange, onRelease)
     track:SetPoint("LEFT")
     track:SetPoint("RIGHT")
     track:SetHeight(4)
-    local thumb = s:CreateTexture(nil, "OVERLAY")
-    thumb:SetTexture(T.TEX.circle)
+    local thumb = W.Round(s, "OVERLAY", "knob")
     thumb:SetSize(14, 14)
     s:SetThumbTexture(thumb)
     T.OnAccent(function(r, g, b) thumb:SetVertexColor(r, g, b) end)
@@ -850,6 +884,7 @@ end
 
 local function buildMenu()
     menu = CreateFrame("Frame", nil, UIParent)
+    W.AddShapeRoot(menu)
     menu:SetAllPoints(UIParent)
     menu:SetFrameStrata("FULLSCREEN_DIALOG")
     menu:Hide()
