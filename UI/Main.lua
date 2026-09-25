@@ -823,7 +823,18 @@ local function build()
             if UI.current == "groups" then UI.RefreshPage() end
         end
     end)
-    ns.On("LOADOUTS_CHANGED", UI, function() if frame:IsShown() then UI.RefreshLoadouts() UI.RefreshPage() end end)
+    -- built before the fonts had loaded (cold start): measure the text again
+    if not T.fontsReady then
+        ns.On("FONTS_READY", UI, function()
+            W.FontsReady()
+            if frame:IsShown() then
+                UI.RefreshStatus()
+                UI.RefreshLoadouts()
+                UI.RefreshPage()
+            end
+        end)
+    end
+    ns.On("LOADOUTS_CHANGED", UI,function() if frame:IsShown() then UI.RefreshLoadouts() UI.RefreshPage() end end)
     ns.On("ROSTERS_CHANGED", UI, function() if frame:IsShown() then UI.RefreshPage() end end)
     ns.On("PLAYER_INFO_CHANGED", UI, function() if frame:IsShown() then UI.RefreshPage() end end)
     ns.On("SETTINGS_CHANGED", UI, function(_, what)

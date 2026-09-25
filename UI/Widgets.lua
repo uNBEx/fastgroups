@@ -111,6 +111,24 @@ function W.SetFont(fs, size, weight, flags)
     fs:SetFont(T.FONT[weight or "regular"], size, flags or "")
 end
 
+-- Widgets that size themselves to their text register a relayout here while the fonts
+-- are still loading (see Theme.lua); W.FontsReady runs each one once. Nothing is kept
+-- once the fonts are in.
+local pendingLayout
+
+function W.WhenFontsReady(obj, fn)
+    if T.fontsReady then return end
+    if not pendingLayout then pendingLayout = setmetatable({}, { __mode = "k" }) end
+    pendingLayout[obj] = fn
+end
+
+function W.FontsReady()
+    local list = pendingLayout
+    pendingLayout = nil
+    if not list then return end
+    for obj, fn in pairs(list) do fn(obj) end
+end
+
 function W.Frame(parent, w, h)
     local f = CreateFrame("Frame", nil, parent)
     if w then f:SetWidth(w) end
@@ -173,6 +191,8 @@ local function buttonUpdate(b)
     b:SetAlpha(b.disabled and 0.4 or 1)
 end
 
+local buttonRelayout
+
 local function buttonLayout(b)
     local w
     local tw = b.label:GetText() and b.label:GetText() ~= "" and b.label:GetUnboundedStringWidth() or 0
@@ -198,6 +218,15 @@ local function buttonLayout(b)
         w = w + b.badge:GetWidth() + 6
     end
     if not b.fixedWidth then b:SetWidth(math.floor(w + 0.5)) end
+    W.WhenFontsReady(b, buttonRelayout)
+end
+
+buttonRelayout = function(b)
+    local badge = b.badge
+    if badge and badge:IsShown() then
+        badge:SetWidth(math.max(18, badge.text:GetUnboundedStringWidth() + 10))
+    end
+    buttonLayout(b)
 end
 
 local buttonMethods = {}
@@ -296,6 +325,8 @@ end
 -- Segmented control
 ---------------------------------------------------------------------------
 --[[ items: array of { value, label }; get() -> value; set(value) ]]
+local function relayoutSegmented(f) f:SetItems(f.items) end
+
 function W.Segmented(parent, items, get, set, opts)
     opts = opts or {}
     local f = CreateFrame("Frame", nil, parent)
@@ -316,6 +347,8 @@ function W.Segmented(parent, items, get, set, opts)
     end
 
     function f:SetItems(list)
+        f.items = list
+        W.WhenFontsReady(f, relayoutSegmented)
         local x = 2
         for i, it in ipairs(list) do
             local b = f.buttons[i]

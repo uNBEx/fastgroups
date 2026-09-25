@@ -2,7 +2,8 @@
 -- lay out under plain Lua, so typos and nil errors show up without the game.
 local stub = require("wow_stub")
 
-local M = { objects = {} }
+-- fontsLoaded = false measures every string as 0 wide, like addon fonts on a cold start.
+local M = { objects = {}, fontsLoaded = true }
 
 local Obj = {}
 local noop = function() end
@@ -70,7 +71,7 @@ function Obj:HookScript(name, fn)
 end
 function Obj:SetText(t) self._text = t == nil and "" or tostring(t) end
 function Obj:GetText() return self._text end
-function Obj:GetStringWidth() return #(self._text or "") * 6 end
+function Obj:GetStringWidth() return M.fontsLoaded and #(self._text or "") * 6 or 0 end
 Obj.GetUnboundedStringWidth = Obj.GetStringWidth
 function Obj:GetStringHeight() return 14 end
 function Obj:CreateTexture() return new("Texture", self) end

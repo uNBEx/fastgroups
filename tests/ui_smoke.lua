@@ -5,6 +5,8 @@ local stub = require("wow_stub")
 local M = require("ui_mock")
 
 local ns = {}
+-- cold start: the window is built before the fonts have loaded (see "fonts arrive late")
+M.fontsLoaded = false
 local FILES = {
     "Core/Init.lua", "Core/Data.lua", "Core/Players.lua", "Core/Raid.lua", "Core/Board.lua",
     "Core/Split.lua", "Core/Loadouts.lua", "Core/Rosters.lua", "Core/Apply.lua", "Core/Announce.lua", "Core/Demo.lua",
@@ -47,6 +49,28 @@ step("demo raid renders 20 cards", function()
     SlashCmdList.FASTGROUPS("demo")
     check(Board.source == "demo", "demo source")
     check(#groups.activeCards == 20, "cards: " .. #groups.activeCards)
+end)
+
+step("fonts arrive late: text is measured again", function()
+    local function textWidth(text)
+        for _, o in ipairs(M.objects) do
+            if o._kind == "FontString" and o._text == text then return o:GetParent():GetWidth() end
+        end
+    end
+    local pill = textWidth("Mythic  -  20 players")
+    local save = groups.save:GetWidth()
+    check(not ns.T.fontsReady, "fonts not ready yet")
+    M.fontsLoaded = true
+    -- the font probes in Theme.lua see their strings grow
+    for _, o in ipairs(M.objects) do
+        local p = o._parent
+        if o.scripts.OnSizeChanged and p and p ~= UI.Frame() and p._parent == UIParent then
+            o.scripts.OnSizeChanged(o, 12, 14)
+        end
+    end
+    check(ns.T.fontsReady, "fonts ready")
+    check(textWidth("Mythic  -  20 players") > pill + 60, "status pill resized: " .. pill)
+    check(groups.save:GetWidth() > save + 20, "button resized: " .. save)
 end)
 
 local function cardFor(key)

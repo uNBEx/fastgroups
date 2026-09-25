@@ -52,20 +52,48 @@ do
     if locale == "koKR" or locale == "zhCN" or locale == "zhTW" then
         local f = STANDARD_TEXT_FONT
         T.FONT = { regular = f, semibold = f, bold = f }
+        T.fontsReady = true
     else
         T.FONT = {
             regular = MEDIA .. "Fonts\\Inter-Regular.ttf",
             semibold = MEDIA .. "Fonts\\Inter-SemiBold.ttf",
             bold = MEDIA .. "Fonts\\Inter-Bold.ttf",
         }
-        -- Touch the font files at load time so the client has them ready before the
-        -- window is built. On a cold start an unloaded font measures as 0 wide, and
-        -- everything sized by GetUnboundedStringWidth comes out too narrow.
+        -- Addon fonts load asynchronously. On a cold start (files not in the disk cache)
+        -- a FontString measures 0 wide until its font has arrived, so a window opened
+        -- early sizes everything that uses GetUnboundedStringWidth too narrow. There is
+        -- no load event: each font gets a probe string, and a frame anchored to it sees
+        -- the size change when the font arrives. Then T.fontsReady is set, FONTS_READY
+        -- fires once (the window re-measures its text) and the probes stop.
+        local holder = CreateFrame("Frame", nil, UIParent)
+        holder:SetSize(1, 1)
+        holder:SetPoint("BOTTOMLEFT")
+        holder:SetAlpha(0)
+        holder:EnableMouse(false)
+        local probes, watchers = {}, {}
+        local function check()
+            if T.fontsReady then return end
+            for i = 1, #probes do
+                if probes[i]:GetUnboundedStringWidth() <= 0 then return end
+            end
+            T.fontsReady = true
+            for i = 1, #watchers do watchers[i]:SetScript("OnSizeChanged", nil) end
+            holder:Hide()
+            ns.Fire("FONTS_READY")
+        end
         for _, path in pairs(T.FONT) do
-            local fs = UIParent:CreateFontString(nil, "BACKGROUND")
+            local fs = holder:CreateFontString(nil, "ARTWORK")
             fs:SetFont(path, 12, "")
             fs:SetText("Aa")
+            fs:SetPoint("BOTTOMLEFT")
+            local watch = CreateFrame("Frame", nil, holder)
+            watch:SetPoint("TOPLEFT", fs, "TOPLEFT")
+            watch:SetPoint("BOTTOMRIGHT", fs, "BOTTOMRIGHT")
+            watch:SetScript("OnSizeChanged", check)
+            probes[#probes + 1] = fs
+            watchers[#watchers + 1] = watch
         end
+        check()
     end
 end
 
