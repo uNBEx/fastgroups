@@ -95,6 +95,10 @@ tools/                  check.sh, deploy.sh, gen_media.py
   (3 and 8 = throttled). Messages max 255 bytes, prefix max 16 chars.
 - Textures: `Texture:SetTextureSliceMargins` + `SetTextureSliceMode` for rounded nine-slices.
 - Menus: `MenuUtil.CreateContextMenu(owner, function(owner, root) ... end)`.
+- `StartSizing` moves the corner by cursor deltas: past the resize bounds the cursor drifts off the
+  grip (`alwaysStartFromMouse` changes nothing). The grip sizes an invisible probe with 1x1 bounds
+  and the window copies its size, clamped. Anchoring to a frame under `StartMoving` fails with
+  "SetPoint would result in anchor family connection".
 - Blizzard UI source: `resources/wow-ui-source` (shallow clone of Gethe/wow-ui-source, branch
   `live`, gitignored). Re-clone if missing.
 

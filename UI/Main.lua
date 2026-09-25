@@ -10,6 +10,7 @@ ns.UI = UI
 
 local SIDEBAR_W = 204
 local TITLE_H = 38
+local MIN_W, MIN_H = 960, 560
 local frame -- main window
 
 function UI.RegisterPage(name, page)
@@ -626,6 +627,40 @@ local function restorePosition()
     end
 end
 
+-- Resizing: StartSizing moves the corner by the cursor's movement, so once a frame stops at
+-- its minimum size the cursor drifts off the grip and stays off it. The grip therefore sizes
+-- an invisible probe that has no real minimum (so it tracks the cursor exactly), and the
+-- window copies the probe's size, clamped to its own minimum.
+local probe
+
+local function startSizing()
+    if not probe then
+        probe = CreateFrame("Frame", nil, frame)
+        probe:Hide()
+        probe:EnableMouse(false)
+        probe:SetResizable(true)
+        probe:SetResizeBounds(1, 1)
+        probe:SetScript("OnSizeChanged", function(_, w, h)
+            frame:SetSize(math.max(w, MIN_W), math.max(h, MIN_H))
+        end)
+    end
+    -- pin the top left corner so the window grows only to the right and down
+    local left, top = frame:GetLeft(), frame:GetTop()
+    frame:ClearAllPoints()
+    frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
+    probe:ClearAllPoints()
+    probe:SetPoint("TOPLEFT", frame, "TOPLEFT")
+    probe:SetSize(frame:GetSize())
+    probe:Show()
+    probe:StartSizing("BOTTOMRIGHT")
+end
+
+local function stopSizing()
+    if not probe then return end
+    probe:StopMovingOrSizing()
+    probe:Hide()
+end
+
 function UI.ResetPosition()
     ns.settings.window.point = nil
     if frame then restorePosition() end
@@ -672,7 +707,7 @@ local function build()
     frame:SetClampedToScreen(true)
     frame:SetMovable(true)
     frame:SetResizable(true)
-    frame:SetResizeBounds(960, 560)
+    frame:SetResizeBounds(MIN_W, MIN_H)
     frame:EnableMouse(true)
     frame:SetScale(ns.settings.scale or 1)
     tinsert(UISpecialFrames, "FastGroupsMainFrame")
@@ -733,16 +768,18 @@ local function build()
     grip:SetScript("OnMouseDown", function()
         grip.sizing = true
         paintGrip()
-        frame:StartSizing("BOTTOMRIGHT")
+        startSizing()
     end)
-    grip:SetScript("OnMouseUp", function()
-        frame:StopMovingOrSizing()
+    local function endSizing()
+        if not grip.sizing then return end
+        stopSizing()
         grip.sizing = nil
         if not grip:IsMouseOver() then SetCursor(nil) end
         paintGrip()
         ns.settings.window.w, ns.settings.window.h = frame:GetSize()
         savePosition()
-    end)
+    end
+    grip:SetScript("OnMouseUp", endSizing)
 
     buildSidebar()
 
@@ -763,6 +800,7 @@ local function build()
         UI.RefreshPage()
     end)
     frame:SetScript("OnHide", function()
+        endSizing()
         ns.UnregisterEvent(UI, "GROUP_ROSTER_UPDATE")
         ns.UnregisterEvent(UI, "UNIT_CONNECTION")
         ns.UnregisterEvent(UI, "PLAYER_REGEN_DISABLED")
