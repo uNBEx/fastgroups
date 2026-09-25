@@ -55,6 +55,12 @@ function IsInGuild() return true end
 function InCombatLockdown() return false end
 function UnitIsGroupLeader() return true end
 function UnitIsGroupAssistant() return false end
+function IsEveryoneAssistant() return false end
+C_PartyInfo = {
+    PromoteToLeader = function(name) stub.promoted = { name, 2 } end,
+    PromoteToAssistant = function(name) stub.promoted = { name, 1 } end,
+    DemoteAssistant = function(name) stub.promoted = { name, 0 } end,
+}
 function UnitAffectingCombat() return false end
 function UnitIsUnit(a, b) return a == b end
 function UnitGroupRolesAssigned() return "NONE" end

@@ -22,11 +22,11 @@ globals = {
 read_globals = {
     "ACCEPT", "DECLINE", "DEFAULT_CHAT_FRAME", "LOCALIZED_CLASS_NAMES_MALE", "MAX_RAID_MEMBERS",
     "RAID_CLASS_COLORS", "STANDARD_TEXT_FONT", "Enum",
-    "C_AddOns", "C_ChatInfo", "C_EncodingUtil", "C_GuildInfo", "C_SpecializationInfo", "C_Timer",
+    "C_AddOns", "C_ChatInfo", "C_EncodingUtil", "C_GuildInfo", "C_PartyInfo", "C_SpecializationInfo", "C_Timer",
     "CanInspect", "ClearInspectPlayer", "ColorPickerFrame", "CreateColor", "CreateFrame",
     "GameTooltip", "GetClassAtlas", "GetDifficultyInfo", "GetGuildRosterInfo", "GetCursorPosition", "GetInstanceInfo",
     "GetLocale", "GetNormalizedRealmName", "GetNumGuildMembers", "GetRaidDifficultyID", "GetRaidRosterInfo",
-    "GetRealmName", "GetSpecializationInfoByID", "InCombatLockdown", "InspectFrame", "IsInGuild", "IsInRaid",
+    "GetRealmName", "GetSpecializationInfoByID", "InCombatLockdown", "InspectFrame", "IsEveryoneAssistant", "IsInGuild", "IsInRaid",
     "LibStub", "NotifyInspect", "SetCursor", "SetRaidSubgroup", "StaticPopup_Show",
     "SwapRaidSubgroup", "UIParent", "UnitAffectingCombat", "UnitGUID", "UnitGroupRolesAssigned",
     "UnitIsConnected", "UnitIsGroupAssistant", "UnitIsGroupLeader", "UnitIsUnit", "UnitIsVisible", "UnitName",

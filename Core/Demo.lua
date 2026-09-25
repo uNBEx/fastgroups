@@ -17,6 +17,9 @@ local ROSTER = {
 -- Known from last week but not here today.
 local ABSENT = { { "Brakka", 71 }, { "Selvyn", 267 }, { "Morvash", 251 } }
 
+-- roster index -> raid rank (2 = leader, 1 = assistant)
+local RANKS = { [1] = 2, [2] = 1, [11] = 1 }
+
 local SAMPLE_NAME = "[Demo] Last week"
 
 local function key(name) return name .. "-" .. REALM end
@@ -32,12 +35,25 @@ function Demo:Start()
         addTemp(row[1], row[2])
         local sd = ns.Data.SPECS[row[2]]
         self.members[key(row[1])] = {
-            index = i, group = math.floor((i - 1) / 5) + 1, rank = i == 1 and 2 or 0,
+            index = i, group = math.floor((i - 1) / 5) + 1, rank = RANKS[i] or 0,
             online = true, class = sd[1], role = sd[2], unit = "player",
         }
     end
     for _, row in ipairs(ABSENT) do addTemp(row[1], row[2]) end
     self:EnsureSample()
+end
+
+-- Stand-in for Raid:SetRank. Passing lead leaves the old leader an assistant.
+function Demo:SetRank(k, rank)
+    local m = self.members[k]
+    if not m then return end
+    if rank == 2 then
+        for _, o in pairs(self.members) do
+            if o.rank == 2 then o.rank = 1 end
+        end
+    end
+    m.rank = rank
+    ns.Board:Changed()
 end
 
 -- A loadout that misses three of today's players and has three absentees,

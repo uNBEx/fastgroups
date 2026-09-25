@@ -62,6 +62,9 @@ tools/                  check.sh, deploy.sh, gen_media.py
 ## Verified API facts (12.1)
 - `SetRaidSubgroup(raidIndex, group)` / `SwapRaidSubgroup(i, j)`: leader or assist, not in
   combat, server-async. One move per `GROUP_ROSTER_UPDATE` (NorthernSkyRaidTools does the same).
+- `C_PartyInfo.PromoteToLeader / PromoteToAssistant / DemoteAssistant(name, exactNameMatch)`:
+  leader only (Blizzard's unit popup gates all three on `UnitIsGroupLeader("player")`); we pass
+  the name as `GetRaidRosterInfo` reports it. Assist options hide when `IsEveryoneAssistant()`.
 - `GetInspectSpecialization` is deprecated in 12.1; use `C_SpecializationInfo.GetInspectSpecialization`.
 - `C_EncodingUtil.SerializeCBOR / CompressString(s, 0) / EncodeBase64` and reverses (11.1.5+).
 - Addon comms blocked during encounters and M+ (`C_ChatInfo.InChatMessagingLockdown()`); each

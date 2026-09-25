@@ -139,6 +139,30 @@ def drawn_icons():
         for cx, cy in ((13, 13), (9, 13), (5, 13), (13, 9), (9, 9), (13, 5)):
             d.ellipse([cx * u - r, cy * u - r, cx * u + r, cy * u + r], fill=255)
     res["grip"] = supersampled(ICON_SIZE, grip)
+
+    # raid rank crowns: one silhouette, filled for the leader, outlined for assistants
+    CROWN = [(2.4, 5.2), (5.3, 8.3), (8, 3.6), (10.7, 8.3), (13.6, 5.2), (12.4, 12.6), (3.6, 12.6)]
+    TIPS = [(2.4, 5.2), (8, 3.6), (13.6, 5.2)]
+
+    def crown(filled):
+        def draw(d, s, k):
+            u = s / 16.0
+            pts = [(x * u, y * u) for x, y in CROWN]
+            if filled:
+                d.polygon(pts, fill=255)
+            d.line(pts + [pts[0]], fill=255, width=int(1.7 * u), joint="curve")
+            # round off the closing corner the way joint="curve" does the others
+            r = 0.85 * u
+            x, y = pts[0]
+            d.ellipse([x - r, y - r, x + r, y + r], fill=255)
+            # a small jewel on each point
+            r = 1.25 * u
+            for tx, ty in TIPS:
+                cx, cy = tx * u, (ty - 1.1) * u
+                d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=255)
+        return draw
+    res["rank_leader"] = supersampled(ICON_SIZE, crown(True))
+    res["rank_assist"] = supersampled(ICON_SIZE, crown(False))
     return res
 
 

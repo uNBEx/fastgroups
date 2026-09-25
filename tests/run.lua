@@ -269,6 +269,32 @@ test("live board picks up joiners and leavers on roster events", function()
     eq(Board.source, "none")
 end)
 
+test("rank changes redraw and promotions use the roster name", function()
+    local roster = { { "Alpha", 2 }, { "Bravo-Stormrage", 0 } }
+    local saved = GetRaidRosterInfo
+    GetRaidRosterInfo = function(i)
+        local r = roster[i]
+        if r then return r[1], r[2], 1, 80, "MAGE", "MAGE", "", true, false, "", false, "DAMAGER" end
+    end
+    stub.inRaid = true
+    Board:SetSource("live")
+    local fired = 0
+    ns.On("BOARD_CHANGED", "test", function() fired = fired + 1 end)
+    roster[2][2] = 1
+    Board:AutoSource()
+    eq(fired, 1, "rank change redraws")
+    eq(ns.Raid.members["Bravo-Stormrage"].rank, 1)
+    ns.Raid:SetRank("Bravo-Stormrage", 2)
+    eq(stub.promoted[1], "Bravo-Stormrage")
+    eq(stub.promoted[2], 2)
+    ns.Raid:SetRank("Alpha-Silvermoon", 0)
+    eq(stub.promoted[1], "Alpha", "same realm players go by their roster name")
+    ns.On("BOARD_CHANGED", "test", nil)
+    GetRaidRosterInfo = saved
+    stub.inRaid = false
+    Board:SetSource("none")
+end)
+
 ---------------------------------------------------------------------------
 test("serialize round trip and rejects junk", function()
     Board:SetSource("demo")

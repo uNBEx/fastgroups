@@ -34,6 +34,7 @@ T.C = {
     tank = { 0.424, 0.714, 1.000 },
     heal = { 0.341, 0.851, 0.541 },
     dps = { 1.000, 0.439, 0.439 },
+    gold = { 1.000, 0.816, 0.200 },  -- raid leader / assistant crowns
     ink = { 0.024, 0.063, 0.094 },   -- text on accent
 }
 
@@ -104,3 +105,4 @@ T.ROLE_ICON = { T = "role_tank", H = "role_healer", D = "role_dps" }
 T.ROLE_COLOR = { T = "tank", H = "heal", D = "dps" }
 T.POS_ICON = { M = "pos_melee", R = "pos_ranged", ["?"] = "pos_unknown" }
 T.ROLE_KEY = { TANK = "T", HEALER = "H", DAMAGER = "D" }
+T.RANK_ICON = { [2] = "rank_leader", [1] = "rank_assist" }

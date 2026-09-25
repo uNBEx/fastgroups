@@ -6,7 +6,7 @@ local _, ns = ...
 local Players = ns.Players
 
 local Raid = {
-    members = {},   -- key -> { index, group, rank, online, class, role, unit }
+    members = {},   -- key -> { index, name, group, rank, online, class, role, unit }
     count = 0,
     version = 0,    -- bumped whenever a refresh sees a change
 }
@@ -40,6 +40,7 @@ function Raid:Refresh()
                 end
                 m.present = true
                 m.index = i
+                m.name = name
                 m.group = subgroup
                 m.rank = rank
                 m.online = online
@@ -90,6 +91,25 @@ end
 
 function Raid:CanManage()
     return IsInRaid() and (UnitIsGroupLeader("player") or UnitIsGroupAssistant("player")) and true or false
+end
+
+-- Only the leader can hand out lead and assist.
+function Raid:CanPromote()
+    return IsInRaid() and UnitIsGroupLeader("player") and true or false
+end
+
+-- rank: 2 = leader, 1 = assistant, 0 = member. Server-async; the roster
+-- update that follows repaints the board.
+function Raid:SetRank(key, rank)
+    local m = self.members[key]
+    if not m or not self:CanPromote() then return end
+    if rank == 2 then
+        C_PartyInfo.PromoteToLeader(m.name, true)
+    elseif rank == 1 then
+        C_PartyInfo.PromoteToAssistant(m.name, true)
+    else
+        C_PartyInfo.DemoteAssistant(m.name, true)
+    end
 end
 
 function Raid:MyRank()

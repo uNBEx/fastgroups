@@ -57,6 +57,12 @@ local function createCard(parent)
     c.pos = c:CreateTexture(nil, "ARTWORK", nil, 1)
     c.pos:SetSize(10, 10)
     c.pos:SetPoint("CENTER", c.posBg, "CENTER")
+    c.rankBg = W.Round(c, "ARTWORK", "round3", 0, 0, 0, 0.45)
+    c.rankBg:SetSize(16, 16)
+    c.rank = c:CreateTexture(nil, "ARTWORK", nil, 1)
+    c.rank:SetSize(12, 12)
+    c.rank:SetPoint("CENTER", c.rankBg, "CENTER")
+    c.rank:SetVertexColor(T.Color("gold"))
     c.name = W.Text(c, 11.5, "bold", "text")
     c.sub = W.Text(c, 9.5, "regular", "text")
     c.tag = CreateFrame("Frame", nil, c)
@@ -160,6 +166,23 @@ local function fillCard(c, key, ghost)
         c.pos:Hide()
     end
 
+    -- raid leader / assistant crown
+    local live = Board:Live()
+    local m = live and live[key]
+    local rankIcon = not ghost and m and T.RANK_ICON[m.rank]
+    if rankIcon then
+        c.rank:SetTexture(T.ICON .. rankIcon)
+        c.rankBg:SetVertexColor(0, 0, 0, subtle and 0.3 or 0.45)
+        c.rankBg:ClearAllPoints()
+        c.rankBg:SetPoint("RIGHT", anchor, "LEFT", -4, 0)
+        c.rankBg:Show()
+        c.rank:Show()
+        anchor = c.rankBg
+    else
+        c.rankBg:Hide()
+        c.rank:Hide()
+    end
+
     -- text
     c.name:SetText(info.name)
     c.name:ClearAllPoints()
@@ -213,8 +236,6 @@ local function fillCard(c, key, ghost)
     end
 
     -- pending move marker
-    local live = Board:Live()
-    local m = live and live[key]
     local g2 = Board.draft[key]
     local moved = not ghost and m and g2 and g2 > 0 and g2 ~= m.group
     c.dot:SetShown(moved and true or false)
@@ -249,6 +270,9 @@ local function cardTooltip(c)
         if m and g ~= m.group then
             local ar, ag, ab = T.Accent()
             GameTooltip:AddLine("Live: group " .. m.group .. "  ->  " .. (g > 0 and ("group " .. g) or "unassigned"), ar, ag, ab)
+        end
+        if m and T.RANK_ICON[m.rank] then
+            GameTooltip:AddLine(m.rank == 2 and "Raid leader" or "Assistant", T.Color("gold"))
         end
         if m and not m.online then GameTooltip:AddLine("Offline", 0.6, 0.6, 0.6) end
         if Board.subs[c.key] then
@@ -359,6 +383,31 @@ local function specMenu(parent, key, class)
     end
 end
 
+local function setRank(key, rank)
+    if Board.source == "demo" then
+        ns.Demo:SetRank(key, rank)
+    else
+        ns.Raid:SetRank(key, rank)
+    end
+end
+
+-- Lead and assist; only the raid leader can hand them out.
+local function rankMenu(root, key)
+    local live = Board:Live()
+    local m = live and live[key]
+    if not m or m.rank == 2 then return end
+    local demo = Board.source == "demo"
+    if not demo and not ns.Raid:CanPromote() then return end
+    root:CreateDivider()
+    local lead = root:CreateButton("Make raid leader", function() setRank(key, 2) end)
+    if not m.online then lead:SetEnabled(false) end
+    if m.rank == 1 then
+        root:CreateButton("Remove assistant", function() setRank(key, 0) end)
+    elseif demo or not IsEveryoneAssistant() then
+        root:CreateButton("Make assistant", function() setRank(key, 1) end)
+    end
+end
+
 local function cardMenu(c)
     local key = c.key
     local info = Players.Get(key)
@@ -416,6 +465,7 @@ local function cardMenu(c)
                 Board:Changed()
             end)
         end
+        rankMenu(root, key)
     end)
 end
 
