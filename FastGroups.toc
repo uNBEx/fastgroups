@@ -9,6 +9,8 @@
 ## AddonCompartmentFuncOnEnter: FastGroups_OnAddonCompartmentEnter
 ## AddonCompartmentFuncOnLeave: FastGroups_OnAddonCompartmentLeave
 ## Category: Raid
+## X-License: All Rights Reserved
+## X-Website: https://github.com/uNBEx/fastgroups
 
 Libs\LibStub\LibStub.lua
 Libs\CallbackHandler-1.0\CallbackHandler-1.0.lua

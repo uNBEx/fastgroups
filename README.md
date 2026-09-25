@@ -4,8 +4,9 @@
 drag players between groups, split the raid into balanced halves with one click, and save the
 setup for next time.
 
-> Status: **v0.1, first build.** Everything below is implemented and covered by offline tests,
-> but it has not been tested in the live game yet. Expect rough edges; please report them.
+> Early release. Please report bugs and ideas on
+> [GitHub issues](https://github.com/uNBEx/fastgroups/issues) or on
+> [Discord](https://discord.gg/GuRw8M4Arg).
 
 Only the raid leader (or an assistant who arranges groups) needs FastGroups. Nobody else in the
 raid has to install anything.
@@ -16,6 +17,9 @@ When players join a raid they land in groups in join order, which is essentially
 bosses need a clean split, usually two halves: left and right. Group placement matters twice:
 players learn their side from their group number, and healers see players sorted by group in
 their raid frames. FastGroups makes that setup fast and repeatable.
+
+This is also very useful for PUGs: you can quickly set up the groups even when the squad keeps
+changing from boss to boss.
 
 ## Features
 
@@ -78,9 +82,14 @@ or unassign it. Right-click a loadout to rename, duplicate, share or delete it.
 
 ## Installation
 
-Not on CurseForge / Wago yet. Copy the repository folder into
-`World of Warcraft/_retail_/Interface/AddOns/FastGroups` (the folder must be named
-`FastGroups`). From WSL, `tools/deploy.sh` does exactly that.
+- **Addon manager**: install FastGroups from
+  [CurseForge](https://www.curseforge.com/wow/addons/fastgroups) or
+  [Wago](https://addons.wago.io/addons/fastgroups) (CurseForge app, WowUp, Wago app).
+- **Manual**: download the zip from [GitHub Releases](https://github.com/uNBEx/fastgroups/releases)
+  and unzip it into `World of Warcraft/_retail_/Interface/AddOns/`, so the folder is
+  `AddOns/FastGroups`.
+
+What changed in each version: [CHANGELOG.md](CHANGELOG.md).
 
 ## Development
 
@@ -90,7 +99,12 @@ Not on CurseForge / Wago yet. Copy the repository folder into
   (`tests/run.lua`) and a UI smoke test (`tests/ui_smoke.lua`) that builds every page against a
   mock frame API and clicks every widget.
 - `tools/gen_media.py` regenerates the textures in `Media/` (icons are drawn from SVG).
-- `tools/deploy.sh` copies the addon into the WoW AddOns folder.
+- `tools/deploy.sh` copies the addon into the WoW AddOns folder (the same files a release
+  zip gets).
+- Releases: versions are git tags (`v1.2.3`, `v1.3.0-beta.1`). Pushing a tag runs
+  `.github/workflows/release.yml`, which checks the build and publishes it to CurseForge, Wago
+  and GitHub Releases with that version's section of [CHANGELOG.md](CHANGELOG.md) as the notes.
+  `tools/package.sh` builds the same zip locally without uploading.
 - Later ideas live in [IDEAS.md](IDEAS.md). Notes for AI agents live in [CLAUDE.md](CLAUDE.md).
 
 ## Credits
@@ -102,4 +116,7 @@ Not on CurseForge / Wago yet. Copy the repository folder into
 
 ## License
 
-To be decided.
+All rights reserved, see [LICENSE](LICENSE). You may use the addon and read the source;
+copying, reuploading, modified versions and commercial use need the author's permission.
+The bundled Inter font (SIL Open Font License) and the libraries in `Libs/` keep their own
+licenses.
