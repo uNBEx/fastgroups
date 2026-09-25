@@ -8,6 +8,9 @@ ns.Players = Players
 
 Players.temp = {}   -- demo players, never saved
 Players.hints = {}  -- class/spec carried by loadouts and imports: key -> { c = class, s = specID }
+-- Specs confirmed this session, key -> "inspect" | "comm" (LibSpecialization),
+-- or false when the player is known to have changed spec since.
+Players.checked = {}
 
 local cache = {}    -- key -> info table, reused between calls
 
@@ -77,6 +80,30 @@ function Players.SetSpec(key, specID, manual)
     rec.stale = nil
 end
 
+-- A spec the player really has (inspected or broadcast). Returns true when
+-- anything shown on the card may change.
+function Players.Confirm(key, specID, source)
+    if not Data.SPECS[specID] then return false end
+    local rec = Players.Record(key)
+    local changed = not rec or rec.spec ~= specID or rec.manual or not Players.checked[key]
+    Players.Seen(key)
+    Players.SetSpec(key, specID)
+    Players.checked[key] = source
+    return changed and true or false
+end
+
+-- The player changed spec (or role): the spec on record needs a new check.
+function Players.Unconfirm(key)
+    Players.checked[key] = false
+end
+
+-- Drop confirmations from one source (inspects are redone per window opening).
+function Players.ForgetChecked(source)
+    for key, v in pairs(Players.checked) do
+        if v == source then Players.checked[key] = nil end
+    end
+end
+
 -- Manual melee/ranged override, nil to go back to the spec default.
 function Players.SetPos(key, pos)
     local rec = Players.Record(key, true)
@@ -88,6 +115,7 @@ function Players.SetClass(key, class)
     if rec.class ~= class then
         rec.class = class
         rec.spec = nil
+        Players.checked[key] = nil
     end
 end
 
@@ -99,7 +127,9 @@ end
 
 --[[ Returns a reused table:
   key, name, class, spec, role ("TANK"|"HEALER"|"DAMAGER"), roleKnown,
-  pos ("M"|"R"|nil), posManual, bucket ("T"|"H"|"M"|"R"|"?"), needsInspect
+  pos ("M"|"R"|nil), posManual, bucket ("T"|"H"|"M"|"R"|"?"),
+  needsInspect (spec unknown, contradicted or changed), recheck (a saved spec
+  the raid role cannot vouch for, not confirmed this session)
 ]]
 function Players.Get(key)
     local info = cache[key]
@@ -121,12 +151,14 @@ function Players.Get(key)
     local assigned = live and live.role
     if assigned ~= "TANK" and assigned ~= "HEALER" and assigned ~= "DAMAGER" then assigned = nil end
 
+    local checked = Players.checked[key]
     local role
     local stale = false
     if sd then
         role = sd[2]
         -- the raid role says otherwise: the spec we remember is out of date
-        if assigned and assigned ~= role and not (rec and rec.manual) then
+        -- (unless we just saw it; a role change clears that, see Raid:Refresh)
+        if assigned and assigned ~= role and not (rec and rec.manual) and not checked then
             role, sd, spec, stale = assigned, nil, nil, true
         end
     else
@@ -160,7 +192,15 @@ function Players.Get(key)
     else
         info.bucket = pos or "?"
     end
-    info.needsInspect = stale or spec == nil
+    info.needsInspect = stale or spec == nil or checked == false
+    -- the real raid role, whatever the board shows (roster / loadout sources)
+    local raidRole = assigned
+    if not raidRole then
+        local m = ns.Raid and ns.Raid.members[key]
+        raidRole = m and (m.role == "TANK" or m.role == "HEALER" or m.role == "DAMAGER") and m.role
+    end
+    info.recheck = not info.needsInspect and not checked
+        and (Data.SHARED_ROLE[spec] or not raidRole) and true or false
     return info
 end
 

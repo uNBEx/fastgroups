@@ -6,7 +6,7 @@ local ns = {}
 local CORE = {
     "Core/Init.lua", "Core/Data.lua", "Core/Players.lua", "Core/Raid.lua", "Core/Board.lua",
     "Core/Split.lua", "Core/Loadouts.lua", "Core/Rosters.lua", "Core/Apply.lua", "Core/Demo.lua",
-    "Core/Inspect.lua", "Core/Serialize.lua", "Core/Comm.lua",
+    "Core/Inspect.lua", "Core/SpecComm.lua", "Core/Serialize.lua", "Core/Comm.lua",
 }
 for _, path in ipairs(CORE) do
     local chunk = assert(loadfile(path))
@@ -293,6 +293,121 @@ test("rank changes redraw and promotions use the roster name", function()
     GetRaidRosterInfo = saved
     stub.inRaid = false
     Board:SetSource("none")
+end)
+
+---------------------------------------------------------------------------
+test("inspect queue paces, retries and rechecks ambiguous specs", function()
+    local Inspect = ns.Inspect
+    local roster = {
+        { "Tanky", "WARRIOR", "TANK" },     -- raid1: spec unknown
+        { "Shammy", "SHAMAN", "DAMAGER" },  -- raid2: saved Elemental, Enhancement is also dps
+        { "Retty", "PALADIN", "DAMAGER" },  -- raid3: saved Retribution, the only dps spec
+        { "Farry", "MAGE", "DAMAGER" },     -- raid4: spec unknown, out of range
+    }
+    local savedRoster, savedSpec = GetRaidRosterInfo, C_SpecializationInfo.GetInspectSpecialization
+    GetRaidRosterInfo = function(i)
+        local r = roster[i]
+        if r then return r[1], 0, 1, 80, r[2], r[2], "", true, false, "", false, r[3] end
+    end
+    local specs = { raid1 = 73, raid2 = 263, raid3 = 65 }
+    C_SpecializationInfo.GetInspectSpecialization = function(u) return specs[u] or 0 end
+    stub.inRaid = true
+    stub.farAway = { raid4 = true }
+    Players.SetSpec("Shammy-Silvermoon", 262)
+    Players.SetSpec("Retty-Silvermoon", 70)
+    Board:AutoSource()
+    eq(Players.Get("Shammy-Silvermoon").recheck, true, "shared role is rechecked")
+    eq(Players.Get("Retty-Silvermoon").recheck, false, "the role vouches for Retribution")
+    stub.inspected, stub.timers = {}, {}
+
+    Inspect:SetActive(true)
+    eq(#stub.inspected, 1, "one request")
+    eq(stub.inspected[1], "raid1", "unknown spec first")
+    Inspect:Kick()
+    eq(#stub.inspected, 1, "nothing more while one is pending")
+    stub.fire("INSPECT_READY", "GUID-raid1")
+    eq(Players.Get("Tanky-Silvermoon").spec, 73)
+    eq(#stub.inspected, 1, "waits before the next request")
+    stub.runTimers()
+    eq(stub.inspected[2], "raid2", "then the saved spec worth a check")
+
+    -- lost requests time out, are retried, then wait for an event
+    stub.runTimers()
+    stub.runTimers()
+    stub.runTimers()
+    eq(#stub.inspected, 4, "three tries")
+    eq(stub.inspected[4], "raid2")
+    Inspect:Kick("Shammy-Silvermoon")
+    eq(#stub.inspected, 5, "hovering asks again")
+    stub.fire("INSPECT_READY", "GUID-raid2")
+    local info = Players.Get("Shammy-Silvermoon")
+    eq(info.spec, 263)
+    eq(info.pos, "M", "Enhancement is melee")
+    eq(info.recheck, false)
+    stub.runTimers()
+    eq(#stub.inspected, 5, "nothing left to ask")
+    for _, u in ipairs(stub.inspected) do
+        if u == "raid3" or u == "raid4" then error("asked about " .. u) end
+    end
+
+    -- a new window session checks ambiguous saved specs again, but not the tank
+    Inspect:SetActive(false)
+    Inspect:SetActive(true)
+    eq(#stub.inspected, 6)
+    eq(stub.inspected[6], "raid2")
+    eq(Players.Get("Tanky-Silvermoon").recheck, false)
+
+    -- a spec change jumps the queue once the current request is answered
+    stub.fire("PLAYER_SPECIALIZATION_CHANGED", "raid3")
+    eq(Players.Get("Retty-Silvermoon").needsInspect, true)
+    eq(Players.Get("Retty-Silvermoon").spec, 70, "old spec shown until read")
+    stub.fire("INSPECT_READY", "GUID-raid2")
+    stub.runTimers()
+    eq(stub.inspected[7], "raid3")
+    stub.fire("INSPECT_READY", "GUID-raid3")
+    eq(Players.Get("Retty-Silvermoon").spec, 65, "a fresh inspect beats the raid role")
+
+    -- a role change sends the player back to the queue
+    roster[1][3] = "DAMAGER"
+    Board:AutoSource()
+    eq(Players.Get("Tanky-Silvermoon").needsInspect, true)
+
+    Inspect:SetActive(false)
+    GetRaidRosterInfo, C_SpecializationInfo.GetInspectSpecialization = savedRoster, savedSpec
+    stub.inRaid, stub.farAway = false, nil
+    Board:AutoSource()
+    wipe(Players.checked)
+end)
+
+test("LibSpecialization broadcasts confirm specs; one request per group", function()
+    stub.inRaid = true
+    local key = "Demony-Silvermoon"
+    stub.fire("CHAT_MSG_ADDON", "LibSpec", "577,BAAAAAAA", "RAID", key)
+    eq(Players.Get(key).spec, 577, "heard while listening from login")
+    eq(Players.checked[key], "comm")
+    ns.SpecComm.OnMessage("LibSpec", "1480,", "PARTY", key)
+    ns.SpecComm.OnMessage("LibSpec", "9999,x", "RAID", key)
+    ns.SpecComm.OnMessage("LibSpec", "R", "RAID", key)
+    ns.SpecComm.OnMessage("FastGroups", "1480,", "RAID", key)
+    eq(Players.Get(key).spec, 577, "junk ignored")
+    ns.SpecComm.OnMessage("LibSpec", "1480,", "RAID", key)
+    eq(Players.Get(key).pos, "R", "Devourer is ranged")
+    Players.ForgetChecked("inspect")
+    eq(Players.Get(key).recheck, false, "broadcasts stay valid across window sessions")
+
+    stub.sent = {}
+    ns.SpecComm.requested = false
+    ns.SpecComm.Request()
+    ns.SpecComm.Request()
+    eq(#stub.sent, 1, "one request")
+    eq(stub.sent[1][1], "LibSpec")
+    eq(stub.sent[1][2], "R")
+    eq(stub.sent[1][3], "RAID")
+    stub.fire("GROUP_FORMED")
+    ns.SpecComm.Request()
+    eq(#stub.sent, 2, "again in a new group")
+    stub.inRaid = false
+    wipe(Players.checked)
 end)
 
 ---------------------------------------------------------------------------

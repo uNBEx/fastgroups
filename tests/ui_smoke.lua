@@ -8,7 +8,7 @@ local ns = {}
 local FILES = {
     "Core/Init.lua", "Core/Data.lua", "Core/Players.lua", "Core/Raid.lua", "Core/Board.lua",
     "Core/Split.lua", "Core/Loadouts.lua", "Core/Rosters.lua", "Core/Apply.lua", "Core/Demo.lua",
-    "Core/Inspect.lua", "Core/Serialize.lua", "Core/Comm.lua",
+    "Core/Inspect.lua", "Core/SpecComm.lua", "Core/Serialize.lua", "Core/Comm.lua",
     "UI/Theme.lua", "UI/Widgets.lua", "UI/Main.lua", "UI/GroupsPage.lua", "UI/RostersPage.lua",
     "UI/SharePage.lua", "UI/OptionsPage.lua", "UI/Minimap.lua",
 }
@@ -287,6 +287,7 @@ step("close window unregisters events", function()
     end
     check(not listening.GROUP_ROSTER_UPDATE, "roster events off when closed")
     check(not listening.INSPECT_READY, "inspect off when closed")
+    check(not listening.PLAYER_SPECIALIZATION_CHANGED, "spec changes off when closed")
 end)
 
 print(failures == 0 and "ui smoke: ok" or ("ui smoke: " .. failures .. " failure(s)"))

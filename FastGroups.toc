@@ -26,6 +26,7 @@ Core\Rosters.lua
 Core\Apply.lua
 Core\Demo.lua
 Core\Inspect.lua
+Core\SpecComm.lua
 Core\Serialize.lua
 Core\Comm.lua
 

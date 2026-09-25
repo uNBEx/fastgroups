@@ -133,12 +133,6 @@ function GetLocale() return "enUS" end
 function GetClassAtlas(c) return "classicon-" .. c end
 function GetDifficultyInfo(id) return "Difficulty " .. tostring(id) end
 function CreateColor(r, g, b, a) return { r = r, g = g, b = b, a = a } end
-function UnitIsConnected() return true end
-function UnitIsVisible() return true end
-function CanInspect() return true end
-function UnitGUID(u) return "GUID-" .. tostring(u) end
-function NotifyInspect(u) stub.inspected = u end
-ClearInspectPlayer = noop
 function SetRaidSubgroup(i, g) stub.lastSet = { i, g } end
 function SwapRaidSubgroup(a, b) stub.lastSwap = { a, b } end
 C_GuildInfo = { GuildRoster = noop }

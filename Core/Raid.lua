@@ -38,6 +38,10 @@ function Raid:Refresh()
                     or m.rank ~= rank or m.class ~= classFile then
                     changed = true
                 end
+                -- a new role usually means a new spec: check it again
+                if m.role and m.role ~= role and Players.checked[key] then
+                    Players.Unconfirm(key)
+                end
                 m.present = true
                 m.index = i
                 m.name = name
@@ -74,7 +78,7 @@ function Raid:UpdateOwnSpec(key)
         if specID then
             local rec = Players.Record(key)
             local changed = not rec or rec.spec ~= specID
-            Players.SetSpec(key, specID)
+            Players.Confirm(key, specID, "self")
             return changed
         end
     end

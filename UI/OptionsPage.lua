@@ -198,8 +198,11 @@ function Page:Build(f)
     -- Behavior
     local beh = newBox(c, "Behavior", "Features cost nothing while they are off.")
     beh:AddRow("Confirm before Apply", nil, toggle("confirmApply"))
-    beh:AddRow("Inspect unknown specs", "Only while this window is open, one player at a time",
-        toggle("autoInspect", function() ns.Inspect:SetActive(UI.Frame() and UI.Frame():IsShown()) end))
+    beh:AddRow("Detect specs", "Inspects while this window is open; also reads specs shared by BigWigs",
+        toggle("autoInspect", function(v)
+            ns.SpecComm.SetEnabled(v)
+            ns.Inspect:SetActive(UI.Frame() and UI.Frame():IsShown())
+        end))
     beh:AddRow("Remember sides in loadouts", "Auto-fill sends returning players to their old half", toggle("rememberSides"))
     self.beh = beh
 

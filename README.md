@@ -42,8 +42,11 @@ their raid frames. FastGroups makes that setup fast and repeatable.
 - **Sharing**: export loadouts as a text string for Discord, or send them in game to another
   FastGroups user over the hidden addon channel (the receiver gets an accept prompt). Your
   personal settings are only included when you ask for it.
-- **Specs**: learned by quietly inspecting raid members while the window is open, remembered
-  between sessions, and settable by hand (right-click a card).
+- **Specs**: read from the spec broadcasts of LibSpecialization (embedded by BigWigs and other
+  addons), and for everyone else by quietly inspecting raid members while the window is open, one
+  at a time. Saved specs a raid role cannot vouch for (say Elemental vs Enhancement) are checked
+  again each time the window opens. Remembered between sessions and settable by hand
+  (right-click a card).
 - **Looks**: flat, dark window with a configurable accent color, bundled Inter font, sidebar with
   pages (Groups, Rosters, Share, Options) and your saved loadouts.
 
@@ -94,6 +97,8 @@ Not on CurseForge / Wago yet. Copy the repository folder into
 
 - Inter font by Rasmus Andersson, SIL Open Font License (`Media/Fonts/Inter-LICENSE.txt`).
 - LibDBIcon, LibDataBroker, LibStub and CallbackHandler by their respective authors.
+- LibSpecialization by Funkeh (BigWigsMods): FastGroups listens to its spec broadcasts
+  (not embedded).
 
 ## License
 

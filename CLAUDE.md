@@ -30,7 +30,8 @@ Core/Loadouts.lua       save/load/rename/duplicate/delete, export format + valid
 Core/Rosters.lua        planning rosters + guild roster scan
 Core/Apply.lua          Apply.NextMove (pure planner, tested) + event-driven driver
 Core/Demo.lua           /fg demo fake raid and sample loadout
-Core/Inspect.lua        event-driven inspect queue for unknown specs
+Core/Inspect.lua        paced inspect queue: unknown/changed specs, then ambiguous saved ones
+Core/SpecComm.lua       listens to LibSpecialization ("LibSpec") spec broadcasts from login
 Core/Serialize.lua      "!FG1!" + Base64(Deflate(CBOR(payload))) via C_EncodingUtil
 Core/Comm.lua           addon messages: O(ffer) / A(ccept) / D(ecline) / C(hunk)
 UI/Theme.lua            colors, fonts, accent hooks
@@ -66,6 +67,11 @@ tools/                  check.sh, deploy.sh, gen_media.py
   leader only (Blizzard's unit popup gates all three on `UnitIsGroupLeader("player")`); we pass
   the name as `GetRaidRosterInfo` reports it. Assist options hide when `IsEveryoneAssistant()`.
 - `GetInspectSpecialization` is deprecated in 12.1; use `C_SpecializationInfo.GetInspectSpecialization`.
+  Inspect is the only API for another player's spec. Requests are paced (1.5 s) with a timeout.
+- LibSpecialization (BigWigs and others) protocol, prefix "LibSpec": "R" asks the group, replies and
+  spec/talent changes are "<specID>,<talent string>". The library keeps no cache and its
+  RequestGroupSpecialization is a no-op, so we listen from login and send "R" once per group.
+- Unverified: `PLAYER_SPECIALIZATION_CHANGED` firing for other raid members in 12.1.
 - `C_EncodingUtil.SerializeCBOR / CompressString(s, 0) / EncodeBase64` and reverses (11.1.5+).
 - Addon comms blocked during encounters and M+ (`C_ChatInfo.InChatMessagingLockdown()`); each
   prefix has a 10 message allowance; `SendAddonMessage` returns `Enum.SendAddonMessageResult`

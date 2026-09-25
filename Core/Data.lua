@@ -21,6 +21,15 @@ Data.SPECS = {
     [1467] = { "EVOKER", "DAMAGER", false }, [1468] = { "EVOKER", "HEALER", false }, [1473] = { "EVOKER", "DAMAGER", false },
 }
 
+-- Specs that share their role with another spec of the same class. The raid
+-- role cannot reveal a switch between them, so a saved one is checked again.
+Data.SHARED_ROLE = {}
+for id, a in pairs(Data.SPECS) do
+    for other, b in pairs(Data.SPECS) do
+        if other ~= id and a[1] == b[1] and a[2] == b[2] then Data.SHARED_ROLE[id] = true end
+    end
+end
+
 Data.CLASSES = {
     "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "DEATHKNIGHT", "SHAMAN",
     "MAGE", "WARLOCK", "MONK", "DRUID", "DEMONHUNTER", "EVOKER",

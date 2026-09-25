@@ -40,7 +40,14 @@ SlashCmdList = {}
 StaticPopupDialogs = {}
 function StaticPopup_Show(which, a, b, data) stub.popup = { which = which, a = a, b = b, data = data } end
 C_AddOns = { GetAddOnMetadata = function() return "@project-version@" end }
-C_Timer = { After = function(_, fn) stub.timer = fn end }
+stub.timers = {}        -- pending C_Timer.After callbacks: { delay, fn }
+C_Timer = { After = function(delay, fn) table.insert(stub.timers, { delay, fn }) end }
+-- run the timers queued so far (not the ones they queue)
+function stub.runTimers()
+    local list = stub.timers
+    stub.timers = {}
+    for _, t in ipairs(list) do t[2]() end
+end
 RAID_CLASS_COLORS = setmetatable({}, { __index = function() return { r = 1, g = 1, b = 1 } end })
 LOCALIZED_CLASS_NAMES_MALE = {}
 MAX_RAID_MEMBERS = 40
@@ -52,6 +59,14 @@ function GetRealmName() return "Silvermoon" end
 function UnitName() return "Tester" end
 function IsInRaid() return stub.inRaid end
 function IsInGuild() return true end
+function IsInGroup(category) return stub.inRaid and category ~= 2 end
+stub.inspected = {}     -- units passed to NotifyInspect
+function NotifyInspect(u) table.insert(stub.inspected, u) end
+function ClearInspectPlayer() end
+function CanInspect() return true end
+function UnitIsConnected() return true end
+function UnitIsVisible(u) return not (stub.farAway and stub.farAway[u]) end
+function UnitGUID(u) return "GUID-" .. tostring(u) end
 function InCombatLockdown() return false end
 function UnitIsGroupLeader() return true end
 function UnitIsGroupAssistant() return false end
