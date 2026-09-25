@@ -69,7 +69,7 @@ function Serialize.ReadPayload(payload)
             local a = s.accent
             if type(a[1]) ~= "number" or type(a[2]) ~= "number" or type(a[3]) ~= "number" then s.accent = nil end
         end
-        if s.conv ~= nil and s.conv ~= "oddeven" and s.conv ~= "split" then s.conv = nil end
+        if s.conv ~= nil and s.conv ~= "oddeven" and s.conv ~= "split" and s.conv ~= "none" then s.conv = nil end
         if s.cardStyle ~= nil and s.cardStyle ~= "filled" and s.cardStyle ~= "subtle" then s.cardStyle = nil end
         if s.sortMode ~= nil and s.sortMode ~= "role" and s.sortMode ~= "class" then s.sortMode = nil end
         if type(s.halfNames) == "table" then

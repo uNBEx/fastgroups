@@ -248,6 +248,7 @@ end
 -- Split the board. Bench groups (beyond the halves) are left alone.
 function Split.Run(board)
     board = board or ns.Board
+    if board:IsSimple() then return 0 end
     local k = board:K()
     local keys = {}
     for _, key in ipairs(board.members) do

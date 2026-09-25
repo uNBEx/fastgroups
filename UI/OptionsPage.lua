@@ -172,8 +172,9 @@ function Page:Build(f)
 
     -- Groups
     local grp = newBox(c, "Groups", "How the halves map to the raid's groups.")
-    grp:AddRow("Split convention", "Switching keeps everyone on their side",
-        seg({ { "oddeven", "Odd / Even" }, { "split", "Low / High" } }, "conv", function(v) Board:SetConvention(v) end))
+    grp:AddRow("Split convention", "Simple: no halves, only groups. Switching keeps everyone on their side",
+        seg({ { "oddeven", "Odd / Even" }, { "split", "Low / High" }, { "none", "Simple" } }, "conv",
+            function(v) Board:SetConvention(v) end))
     local names = CreateFrame("Frame")
     names:SetSize(186, 28)
     local nL = W.Edit(names, { width = 90, height = 28, maxLetters = 16, onChange = function(t, user)

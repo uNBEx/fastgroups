@@ -256,6 +256,7 @@ local sidebar, loadoutRows, loadoutScroll, filterBox
 local ROW_H = 42
 
 local function convLabel(conv, k)
+    if conv == "none" then return "Simple" end
     local L, R = Board.HalvesFor(conv or "oddeven", k or 4)
     if conv == "split" then
         return L[1] .. "-" .. L[#L] .. " / " .. R[1] .. "-" .. R[#R]
@@ -376,14 +377,20 @@ function UI.RefreshLoadouts()
 end
 
 function UI.LoadLoadout(id)
+    Board.switched = nil
     Loadouts.Load(id)
     UI.ShowPage("groups")
+    local switched = Board.switched and (Board.switched == "simple" and " Switched to simple mode."
+        or " Switched to split mode.") or ""
+    Board.switched = nil
     local l = Board.loaded
     if l and l.absent == 0 and l.fresh == 0 and l.returning == 0 then
         local n = Board:Pending()
-        UI.Toast("Loaded \"" .. l.name .. "\". Everyone is here" .. (Board:IsLiveLike() and (", " .. n .. " move" .. (n == 1 and "" or "s") .. " pending.") or "."), "ok")
+        UI.Toast("Loaded \"" .. l.name .. "\". Everyone is here" .. (Board:IsLiveLike() and (", " .. n .. " move" .. (n == 1 and "" or "s") .. " pending.") or ".") .. switched, "ok")
         Board.loaded = nil
         Board:Changed()
+    elseif switched ~= "" then
+        UI.Toast(strtrim(switched), "ok")
     end
 end
 

@@ -97,7 +97,7 @@ ns.defaults = {
         cardStyle = "filled",      -- "filled" | "subtle"
         squareCorners = true,
         showSpec = true,
-        conv = "oddeven",          -- "oddeven" | "split"
+        conv = "oddeven",          -- "oddeven" | "split" | "none" (simple mode: no halves)
         halfNames = { L = "Left", R = "Right" },
         groupsMode = "auto",       -- "auto" | 4 | 6
         sharedGroup = false,       -- 11-15 / 21-25 players: halves use full groups, the last one is split

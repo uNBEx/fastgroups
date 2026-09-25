@@ -774,26 +774,31 @@ end
 
 local ROLE_NAMES = { T = "tanks", H = "healers", M = "melee", R = "ranged", U = "players with unknown position" }
 
+-- side "A" (simple mode) counts groups 1..K with nothing to compare against.
+local NO_COUNTS = { T = 0, H = 0, M = 0, R = 0, U = 0, cls = {} }
+
 local function fillCounters(f, side, width)
     f:SetWidth(width)
+    local all = side == "A"
     local me = Board:Counts(side)
     local vals = { T = me.T, H = me.H, M = me.M, R = me.R, U = me.U }
     local cls = {}
     for k, v in pairs(me.cls) do cls[k] = v end
-    local other = Board:Counts(side == "L" and "R" or "L")
+    local other = all and NO_COUNTS or Board:Counts(side == "L" and "R" or "L")
     local ovals = { T = other.T, H = other.H, M = other.M, R = other.R, U = other.U }
+    local where = all and (" in groups 1-" .. Board:K()) or nil
     local x = 0
     for _, c in ipairs(f.roles) do
         local k = c.key
         if k == "U" and vals.U == 0 and ovals.U == 0 then
             c:Hide()
         else
-            local bad = k ~= "U" and Board.Uneven(vals[k], ovals[k])
+            local bad = not all and k ~= "U" and Board.Uneven(vals[k], ovals[k])
             c.num:SetText(vals[k])
             c.num:SetTextColor(T.Color(bad and "warn" or "text"))
             c.border:SetVertexColor(T.Color(bad and "warn" or "line"))
             c.border:SetAlpha(bad and 0.7 or 1)
-            c.tip = vals[k] .. " " .. ROLE_NAMES[k] .. " here, " .. ovals[k] .. " on the other half"
+            c.tip = vals[k] .. " " .. ROLE_NAMES[k] .. (where or (" here, " .. ovals[k] .. " on the other half"))
             c.label:SetShown(width > 330)
             local w = 8 + 14 + 6 + c.num:GetUnboundedStringWidth() + (c.label:IsShown() and (5 + c.label:GetUnboundedStringWidth()) or 0) + 9
             c:SetWidth(math.floor(w))
@@ -803,13 +808,14 @@ local function fillCounters(f, side, width)
             x = x + c:GetWidth() + 5
         end
     end
-    -- class chips: raid-debuff classes always, others when uneven
+    -- class chips: raid-debuff classes always, others when uneven (simple
+    -- mode: every class present)
     local n = 0
     local cx = f.clsLabel:GetUnboundedStringWidth() + 10
     for _, class in ipairs(Data.CLASSES) do
         local a, b = cls[class] or 0, other.cls[class] or 0
-        local bad = Board.Uneven(a, b)
-        if (a > 0 or b > 0) and (Data.BUFF_CLASSES[class] or bad) then
+        local bad = not all and Board.Uneven(a, b)
+        if (a > 0 or b > 0) and (all or Data.BUFF_CLASSES[class] or bad) then
             n = n + 1
             local c = classChip(f, n)
             c.sq:SetVertexColor(Data.ClassColor(class))
@@ -819,8 +825,8 @@ local function fillCounters(f, side, width)
             c.border:SetAlpha(bad and 0.7 or 1)
             c.star:SetShown(Data.BUFF_CLASSES[class] and true or false)
             c.star:SetTextColor(T.Accent())
-            c.tip = Data.ClassName(class) .. ": " .. a .. " here, " .. b .. " on the other half"
-                .. (Data.BUFF_CLASSES[class] and "\nRaid debuff class, keep it even." or "")
+            c.tip = Data.ClassName(class) .. ": " .. a .. (where or (" here, " .. b .. " on the other half"
+                .. (Data.BUFF_CLASSES[class] and "\nRaid debuff class, keep it even." or "")))
             local w = 6 + 10 + 5 + c.num:GetUnboundedStringWidth() + (c.star:IsShown() and 8 or 0) + 7
             c:SetWidth(math.floor(w))
             if cx + w > width then break end
@@ -831,6 +837,7 @@ local function fillCounters(f, side, width)
         end
     end
     for i = n + 1, #f.cls do f.cls[i]:Hide() end
+    f.even:SetText(all and "none" or "all even")
     if n == 0 then
         f.even:ClearAllPoints()
         f.even:SetPoint("LEFT", f.clsLabel, "RIGHT", 8, 0)
@@ -895,7 +902,7 @@ function Page:Build(f)
     self.sourceBtn.chev:SetRotation(-math.pi / 2)
     self.sourceBtn:SetPoint("LEFT", PAD, 0)
 
-    self.conv = W.Segmented(tb, { { "oddeven", "Odd / Even" }, { "split", "1-2 / 3-4" } },
+    self.conv = W.Segmented(tb, { { "oddeven", "Odd / Even" }, { "split", "1-2 / 3-4" }, { "none", "Simple" } },
         function() return ns.settings.conv end,
         function(v) Board:SetConvention(v) end)
     self.conv:SetPoint("LEFT", self.sourceBtn, "RIGHT", 6, 0)
@@ -999,7 +1006,7 @@ function Page:Build(f)
     local single = CreateFrame("Frame", nil, content)
     W.Skin(single, "panel", "line")
     single.counters = {}
-    for _, side in ipairs({ "L", "R" }) do
+    for _, side in ipairs({ "L", "R", "A" }) do
         local lbl = W.Text(single, 10, "bold", "dim")
         single.counters[side] = createCounters(single)
         single.counters[side].lbl = lbl
@@ -1106,7 +1113,9 @@ function Page:RefreshToolbar()
     self.conv:SetItems({
         { "oddeven", "Odd / Even", "Left half = odd groups, right half = even groups." },
         { "split", range(L) .. " / " .. range(R), "Left half = low groups, right half = high groups." },
+        { "none", "Simple", "No halves: just the groups, counted together. Nothing to announce." },
     })
+    local simple = Board:IsSimple()
     local shared = Board:Shared()
     local groupsCtl = self.groups
     if shared then
@@ -1172,14 +1181,19 @@ function Page:RefreshToolbar()
     else
         self.announce:Hide()
     end
-    self.split:ClearAllPoints()
-    self.split:SetPoint("RIGHT", anchor, "LEFT", -6, 0)
-    self.split:SetDisabled(none or running or #Board.members == 0)
+    if simple then
+        self.split:Hide()
+    else
+        self.split:Show()
+        self.split:ClearAllPoints()
+        self.split:SetPoint("RIGHT", anchor, "LEFT", -6, 0)
+        self.split:SetDisabled(none or running or #Board.members == 0)
+    end
     self.chip:ClearAllPoints()
     self.chip:SetPoint("RIGHT", self.split, "LEFT", -6, 0)
 
     local imb = Board:Imbalances()
-    if none or #Board.members == 0 then
+    if simple or none or #Board.members == 0 then
         self.chip:Hide()
     else
         self.chip:Show()
@@ -1222,7 +1236,7 @@ function Page:RefreshToolbar()
     local rightW = PAD + self.apply:GetWidth() + (running and 4 + self.stop:GetWidth() or 0)
         + 6 + self.save:GetWidth() + (live and 4 + self.revert:GetWidth() or 0)
         + (announce and 4 + self.announce:GetWidth() or 0)
-        + 6 + self.split:GetWidth() + (self.chip:IsShown() and 6 + self.chip:GetWidth() or 0)
+        + (simple and 0 or 6 + self.split:GetWidth()) + (self.chip:IsShown() and 6 + self.chip:GetWidth() or 0)
     local tbW = self.toolbar:GetWidth()
     if tbW < 50 then tbW = self.f:GetWidth() end
     if leftW + 8 + rightW > tbW then
@@ -1344,10 +1358,15 @@ function Page:LayoutBanner(width, y)
         return y + 46 + 12
     elseif src == "roster" then
         local r = ns.Rosters.Find(Board.sourceId)
-        setBanner(b, "Planning with |cffffffff" .. (r and r.name or "") .. "|r",
-            "Auto-split or drag players into groups, then Save as a loadout and load it when the raid forms.",
-            { text = "Auto-split", kind = "primary", onClick = function() ns.Split.Run(Board) end },
-            nil)
+        if Board:IsSimple() then
+            setBanner(b, "Planning with |cffffffff" .. (r and r.name or "") .. "|r",
+                "Drag players into groups, then Save as a loadout and load it when the raid forms.", nil, nil)
+        else
+            setBanner(b, "Planning with |cffffffff" .. (r and r.name or "") .. "|r",
+                "Auto-split or drag players into groups, then Save as a loadout and load it when the raid forms.",
+                { text = "Auto-split", kind = "primary", onClick = function() ns.Split.Run(Board) end },
+                nil)
+        end
         return y + 46 + 12
     end
     local l = Board.loaded
@@ -1376,7 +1395,8 @@ function Page:LayoutHalves(width, y)
     local L, R = Board:Halves()
     local shared = Board:Shared()
     local counterW
-    if s.arrangeByHalf then
+    local simple = Board:IsSimple()
+    if s.arrangeByHalf and not simple then
         self.single:Hide()
         local halfW = math.floor((width - 12) / 2)
         local hh = HALF_PAD + HALF_HEAD + COL_H + 10 + 54 + HALF_PAD
@@ -1418,7 +1438,8 @@ function Page:LayoutHalves(width, y)
         end
         return y + hh + 14
     end
-    -- one panel, groups 1..k in order with side tags
+    -- one panel, groups 1..k in order with side tags (simple mode: no tags,
+    -- one row of counters for all of them)
     for _, side in ipairs({ "L", "R" }) do self.halves[side]:Hide() end
     local p = self.single
     local hh = HALF_PAD + COL_H + 10 + 16 + 54 + HALF_PAD
@@ -1435,14 +1456,19 @@ function Page:LayoutHalves(width, y)
         fillColumn(col, colW)
     end
     local halfW = math.floor((width - 2 * HALF_PAD - 12) / 2)
-    for i, side in ipairs({ "L", "R" }) do
+    for i, side in ipairs({ "L", "R", "A" }) do
         local c = p.counters[side]
-        c.lbl:SetText(strupper(s.halfNames[side]))
-        c.lbl:ClearAllPoints()
-        c.lbl:SetPoint("TOPLEFT", HALF_PAD + (i - 1) * (halfW + 12), -(HALF_PAD + COL_H + 10))
-        c:ClearAllPoints()
-        c:SetPoint("TOPLEFT", c.lbl, "BOTTOMLEFT", 0, -6)
-        fillCounters(c, side, halfW)
+        local shown = (side == "A") == simple
+        c:SetShown(shown)
+        c.lbl:SetShown(shown)
+        if shown then
+            c.lbl:SetText(side == "A" and ("GROUPS 1-" .. k) or strupper(s.halfNames[side]))
+            c.lbl:ClearAllPoints()
+            c.lbl:SetPoint("TOPLEFT", HALF_PAD + (i - 1) % 2 * (halfW + 12), -(HALF_PAD + COL_H + 10))
+            c:ClearAllPoints()
+            c:SetPoint("TOPLEFT", c.lbl, "BOTTOMLEFT", 0, -6)
+            fillCounters(c, side, side == "A" and width - 2 * HALF_PAD or halfW)
+        end
     end
     p:Show()
     return y + hh + 14
@@ -1464,7 +1490,8 @@ function Page:LayoutTray(width, y)
     tray:SetPoint("TOPLEFT", 0, -y)
     tray:SetWidth(width)
     if #waiting > 0 then
-        tray.hint:SetText(#waiting .. " waiting  -  drag into a group, drop onto an ABSENT card to substitute, or use Auto-fill / Auto-split")
+        tray.hint:SetText(#waiting .. " waiting  -  drag into a group, drop onto an ABSENT card to substitute, or use "
+            .. (Board:IsSimple() and "Auto-fill" or "Auto-fill / Auto-split"))
         tray.empty:Hide()
     else
         tray.hint:SetText("drop players here to take them out of the setup")

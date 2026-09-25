@@ -321,6 +321,7 @@ step("fuzz", function()
     Board:SetSource("demo")
     for _, p in ipairs({ "groups", "rosters", "share", "options" }) do fuzz(p) end
     for msg in pairs(fuzzErrors) do print("FUZZ " .. msg) failures = failures + 1 end
+    Board:SetConvention("oddeven")
 end)
 
 step("shared odd group board", function()
@@ -369,6 +370,41 @@ step("shared odd group board", function()
     Board:SetShared(false)
     SlashCmdList.FASTGROUPS("demo")
     check(#Board.members == 20 and Board:K() == 4, "back to the Mythic demo")
+end)
+
+step("simple mode board", function()
+    UI.ShowPage("groups")
+    SlashCmdList.FASTGROUPS("demo")
+    Board:SetConvention("oddeven")
+    groups:Refresh()
+    check(groups.split:IsShown() and groups.chip:IsShown(), "split mode toolbar")
+    Board:SetConvention("none")
+    check(not groups.split:IsShown(), "no Auto-split")
+    check(not groups.chip:IsShown(), "no balance chip")
+    check(not groups.announce:IsShown(), "no announce button")
+    check(groups.single:IsVisible(), "one panel")
+    check(not groups.halves.L:IsVisible() and not groups.halves.R:IsVisible(), "no halves")
+    local p = groups.single
+    check(p.counters.A:IsShown() and not p.counters.L:IsShown() and not p.counters.R:IsShown(), "one counter row")
+    check(p.counters.A.lbl._text == "GROUPS 1-4", "counter label: " .. tostring(p.counters.A.lbl._text))
+    for _, c in ipairs(groups.activeCards) do
+        local t = c.tag:IsShown() and c.tag.text._text
+        check(t ~= "LEFT" and t ~= "RIGHT", "no side tags: " .. tostring(t))
+    end
+    for g = 1, 4 do check(not groups.columns[g].sideTag:IsShown(), "no column side tag") end
+    local c = cardFor("Thalric-Silvermoon")
+    c.scripts.OnClick(c, "RightButton")
+    for _, e in ipairs(ns.W.menuRoot.children) do
+        check(not (e.text or ""):find("^Move to "), "no half move in the menu")
+    end
+    fuzz("groups")
+    Board:SetConvention("none")
+    fuzz("options")
+    for msg in pairs(fuzzErrors) do print("FUZZ " .. msg) failures = failures + 1 end
+    Board:SetConvention("oddeven")
+    ns.settings.arrangeByHalf = true   -- the options fuzz flips toggles
+    UI.ShowPage("groups")
+    check(groups.halves.L:IsShown() and not groups.single:IsShown(), "halves back")
 end)
 
 step("close window unregisters events", function()

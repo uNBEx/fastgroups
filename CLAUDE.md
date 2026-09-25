@@ -59,6 +59,10 @@ tools/                  check.sh, deploy.sh, gen_media.py
   It wins over a fixed "Groups used". Loadouts store k = 3 or 5 and the sides in `memory`.
   Remap sends players past the end of a half to the shared group and back to the half's last group.
   Only the leader sees the sides, so Announce posts them to raid chat (after Apply or on click).
+- Simple mode (`conv = "none"`): no halves, just groups 1..K and the bench. One counter row for
+  groups 1..K, no Auto-split, no balance chip, nothing announced. Switching to or from it never
+  moves anyone (groups keep their number). Loadouts store it, and loading one switches between
+  simple and split mode (`Board:AdoptMode`); between the two split conventions the current one stays.
 - Balance priority per half: tanks, healers, melee, ranged, then classes (Demon Hunter and Monk
   weigh 3x because of their raid debuffs). Target for 2T/4H/14D is 1/2/7 per half.
 - Sort inside a group: tank, healer, melee, ranged, then name (or class).

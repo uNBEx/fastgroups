@@ -19,6 +19,7 @@ local Board = {
     liveVersion = nil,  -- ns.Raid.version the board last synced with
     loaded = nil,       -- reconcile summary of the loaded loadout
     activeLoadout = nil,
+    switched = nil,     -- "simple" | "split" when loading a loadout changed the mode (the UI clears it)
 }
 ns.Board = Board
 
@@ -46,12 +47,17 @@ function Board:IsMythic()
     return false
 end
 
+-- Simple mode: no halves, the board is just groups 1..K and the bench.
+function Board:IsSimple()
+    return settings().conv == "none"
+end
+
 -- Shared odd group layout (opt-in). When the players fill an odd number of
 -- groups (11-15 or 21-25 players), the groups before the last one form the
 -- halves and the last one is shared: each of its players has an own side.
 -- An odd K stands for this layout; the shared group is group K.
 function Board:SharedK()
-    if not settings().sharedGroup or self:IsMythic() then return nil end
+    if not settings().sharedGroup or self:IsSimple() or self:IsMythic() then return nil end
     local m = math.ceil(#self.members / GROUP_SIZE)
     if m == 3 or m == 5 then return m end
     return nil
@@ -79,13 +85,13 @@ end
 local halvesCache = {}
 
 -- Returns two arrays of group numbers for the left and right half. An odd
--- k leaves out its last group, which is shared.
+-- k leaves out its last group, which is shared. Simple mode has no halves.
 function Board.HalvesFor(conv, k)
     local id = conv .. k
     local h = halvesCache[id]
     if h then return h.L, h.R end
     h = { L = {}, R = {} }
-    local n = k - k % 2
+    local n = conv == "none" and 0 or k - k % 2
     for g = 1, n do
         if conv == "oddeven" then
             if g % 2 == 1 then tinsert(h.L, g) else tinsert(h.R, g) end
@@ -113,22 +119,22 @@ function Board:SideOf(g)
 end
 
 -- The shared group of a layout with k groups, or nil.
-function Board.SharedOf(k)
-    if k % 2 == 1 then return k end
+function Board.SharedOf(k, conv)
+    if k % 2 == 1 and conv ~= "none" then return k end
     return nil
 end
 
 function Board:Shared()
-    return Board.SharedOf(self:K())
+    return Board.SharedOf(self:K(), settings().conv)
 end
 
 -- Side of a player: the half of their group, or their own side in the shared group.
 function Board:PlayerSide(key)
     local g = self.draft[key]
     if not g or g == 0 then return nil end
-    local k = self:K()
-    if g == Board.SharedOf(k) then return self.sides[key] end
-    return Board.SideOfFor(g, settings().conv, k)
+    local conv, k = settings().conv, self:K()
+    if g == Board.SharedOf(k, conv) then return self.sides[key] end
+    return Board.SideOfFor(g, conv, k)
 end
 
 function Board:GhostSide(gh)
@@ -141,13 +147,19 @@ end
 -- the target layout has no matching group) and, when that is the shared
 -- group, the side the player has there. Players past the end of a half go
 -- to the shared group; shared players go to the last group of their half.
+-- To or from simple mode groups keep their number; groups past the new
+-- end go to the tray.
 function Board.Remap(g, fromConv, fromK, toConv, toK, pside)
     if not g or g == 0 then return 0 end
-    local toShared = Board.SharedOf(toK)
+    if fromConv == "none" or toConv == "none" then
+        if (g <= fromK) == (g <= toK) then return g, pside end
+        return 0
+    end
+    local toShared = Board.SharedOf(toK, toConv)
     local side, idx = Board.SideOfFor(g, fromConv, fromK)
     local L, R = Board.HalvesFor(toConv, toK)
     if not side then
-        if g ~= Board.SharedOf(fromK) then
+        if g ~= Board.SharedOf(fromK, fromConv) then
             if g > toK then return g end
             return 0
         end
@@ -263,20 +275,23 @@ function Board:Dirty()
     return false
 end
 
-local countTables = { L = { cls = {} }, R = { cls = {} } }
+local countTables = { L = { cls = {} }, R = { cls = {} }, A = { cls = {} } }
 
 -- Per-half counts: T, H, M, R, U (unknown position), n, off (offline), cls[class].
+-- side "A" counts groups 1..K, the bench left out.
 function Board:Counts(side)
     local c = countTables[side]
     c.T, c.H, c.M, c.R, c.U, c.n, c.off = 0, 0, 0, 0, 0, 0, 0
     wipe(c.cls)
     local live = self:Live()
     local conv, k = settings().conv, self:K()
-    local shared = Board.SharedOf(k)
+    local shared = Board.SharedOf(k, conv)
     for _, key in ipairs(self.members) do
         local g = self.draft[key]
         local ps
-        if g == shared then
+        if side == "A" then
+            ps = g and g > 0 and g <= k and "A"
+        elseif g == shared then
             ps = self.sides[key]
         elseif g and g > 0 then
             ps = Board.SideOfFor(g, conv, k)
@@ -403,6 +418,7 @@ function Board:SetSource(src, id)
         local lo = ns.Loadouts.Find(id)
         if lo then
             ns.Loadouts.SetHints(lo)
+            self:AdoptMode(lo)
             local conv, k = settings().conv, lo.k or 4
             local memory = lo.memory or {}
             for key, g in pairs(lo.groups) do
@@ -527,6 +543,14 @@ function Board:Substitute(key, ghostKey)
     return false
 end
 
+-- First group in 1..K with a free slot.
+function Board:FreeGroup()
+    for g = 1, self:K() do
+        if self:Occupancy(g) < GROUP_SIZE then return g end
+    end
+    return nil
+end
+
 -- First group of a half with a free slot, else the shared group. Move the
 -- player there with the side passed here.
 function Board:FreeGroupIn(side)
@@ -647,6 +671,17 @@ end
 ---------------------------------------------------------------------------
 -- Loadouts on the board
 ---------------------------------------------------------------------------
+-- A loadout brings its mode: a simple one turns simple mode on, a split one
+-- turns it off (its own convention). Between split conventions the board
+-- keeps the current one and remaps. Sets self.switched when the mode changed.
+function Board:AdoptMode(lo)
+    local s = settings()
+    local conv = lo.conv or "oddeven"
+    if (conv == "none") ~= (s.conv == "none") then
+        s.conv = conv
+        self.switched = conv == "none" and "simple" or "split"
+    end
+end
 
 -- Load a loadout. On a live raid, roster or demo this reconciles who is
 -- present, absent, new or returning. Otherwise the loadout is opened for
@@ -657,6 +692,7 @@ function Board:ApplyLoadout(lo)
         return
     end
     ns.Loadouts.SetHints(lo)
+    self:AdoptMode(lo)
     local conv, k = settings().conv, self:K()
     clearLoadState(self)
     local present, absent, fresh, returning = 0, 0, 0, 0
@@ -696,7 +732,8 @@ end
 
 -- Put waiting players into absent players' slots: same role first, then same
 -- melee/ranged, then same class; returning players prefer their old side.
--- Leftovers go to free slots on the half that needs their role most.
+-- Leftovers go to free slots on the half that needs their role most (in
+-- simple mode to the first free group).
 function Board:AutoFill()
     local lo = self.loaded and self.loaded.lo
     local memory = lo and settings().rememberSides and lo.memory or nil
@@ -735,8 +772,15 @@ function Board:AutoFill()
             placed = placed + 1
         end
     end
+    local simple = self:IsSimple()
     for _, key in ipairs(waiting) do
-        if self.draft[key] == 0 then
+        if simple and self.draft[key] == 0 then
+            local g = self:FreeGroup()
+            if g then
+                self.draft[key] = g
+                placed = placed + 1
+            end
+        elseif self.draft[key] == 0 then
             local info = Players.Get(key)
             local b = info.bucket == "?" and "U" or info.bucket
             local L, R = self:Counts("L")[b], self:Counts("R")[b]

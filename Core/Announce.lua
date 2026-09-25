@@ -20,6 +20,7 @@ end
 -- Is there anything to announce? Cheap; used to show the button.
 function Announce.Has(board)
     board = board or ns.Board
+    if board:IsSimple() then return false end
     if ns.settings.announceWhat == "all" then return true end
     local shared = board:Shared()
     return shared ~= nil and board:Occupancy(shared) > 0
@@ -33,6 +34,7 @@ function Announce.Lines(board)
     local s = ns.settings
     local nameL, nameR = clean(s.halfNames.L), clean(s.halfNames.R)
     local lines = {}
+    if board:IsSimple() then return lines end
     if s.announceWhat == "all" then
         local L, R = board:Halves()
         if #L > 0 or #R > 0 then

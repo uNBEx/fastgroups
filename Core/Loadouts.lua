@@ -2,7 +2,7 @@
 --[[ Stored in FastGroupsDB.loadouts as an array, most recently used first:
   {
     id, name, updated,
-    conv = "oddeven" | "split",   -- convention the groups were saved with
+    conv = "oddeven" | "split" | "none", -- convention the groups were saved with; none = simple mode
     k = 2..6,                     -- groups used when saved; odd = the last one is shared
     groups = { [key] = group },   -- everyone in the setup, absent players included
     memory = { [key] = "L"|"R" }, -- last known side of everyone who ever was in it; for
@@ -81,7 +81,7 @@ function Loadouts.SaveCurrent(name, overwriteId)
         for key, side in pairs(lo.memory) do memory[key] = side end
     end
     local groups, info = {}, {}
-    local shared = board.SharedOf(k)
+    local shared = board.SharedOf(k, s.conv)
     local function add(key, g, own)
         groups[key] = g
         local side
@@ -174,7 +174,7 @@ function Loadouts.FromExport(t)
     if type(t) ~= "table" or type(t.g) ~= "table" then return nil end
     local lo = {
         name = cleanName(type(t.n) == "string" and t.n or "Imported"),
-        conv = (t.c == "split") and "split" or "oddeven",
+        conv = (t.c == "split" or t.c == "none") and t.c or "oddeven",
         k = (type(t.k) == "number" and t.k >= 2 and t.k <= 6 and t.k == math.floor(t.k)) and t.k
             or (t.k == 8 and 8) or 4,
         groups = {}, memory = {}, info = {},

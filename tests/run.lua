@@ -721,5 +721,128 @@ test("announce goes to raid chat on a live raid", function()
     Board:SetSource("none")
 end)
 
+---------------------------------------------------------------------------
+-- Simple mode: no halves
+---------------------------------------------------------------------------
+local function draftCopy()
+    local t = {}
+    for k, v in pairs(Board.draft) do t[k] = v end
+    return t
+end
+
+test("simple mode has no halves and counts groups 1..K", function()
+    Board:SetSource("demo")
+    local before = draftCopy()
+    Board:SetConvention("none")
+    assert(Board:IsSimple())
+    for k, v in pairs(before) do eq(Board.draft[k], v, "nobody moves: " .. k) end
+    local L, R = Board:Halves()
+    eq(#L + #R, 0)
+    eq(Board:Shared(), nil)
+    eq(Board:SideOf(1), nil)
+    eq(Board:PlayerSide("Thalric-Silvermoon"), nil)
+    eq(Board:K(), 4)
+    local c = Board:Counts("A")
+    eq(c.n, 20)
+    eq(c.T + c.H + c.M + c.R + c.U, 20)
+    Board:Move("Thalric-Silvermoon", 6)
+    eq(Board:Counts("A").n, 19, "bench not counted")
+    eq(#Board:Imbalances(), 0)
+    local moved = draftCopy()
+    eq(ns.Split.Run(Board), 0)
+    for k, v in pairs(moved) do eq(Board.draft[k], v, "auto-split does nothing: " .. k) end
+    ns.settings.announceWhat = "all"
+    eq(ns.Announce.Has(), false)
+    eq(#ns.Announce.Lines(), 0)
+    ns.settings.announceWhat = "shared"
+    Board:SetConvention("split")
+    for k, v in pairs(moved) do eq(Board.draft[k], v, "back to split: " .. k) end
+    Board:SetConvention("oddeven")
+    Board:SetSource("demo")
+end)
+
+test("simple mode and the shared group", function()
+    sharedDemo(13)
+    ns.Split.Run(Board)
+    local groups, sides = draftCopy(), {}
+    for k, v in pairs(Board.sides) do if Board.draft[k] == 3 then sides[k] = v end end
+    Board:SetConvention("none")
+    eq(Board:K(), 4)
+    eq(Board:Shared(), nil)
+    for k, v in pairs(groups) do eq(Board.draft[k], v, k) end
+    Board:SetConvention("oddeven")
+    eq(Board:K(), 3)
+    for k, v in pairs(groups) do eq(Board.draft[k], v, k) end
+    for k, v in pairs(sides) do eq(Board.sides[k], v, k) end
+    -- group 4 exists only in simple mode: its players go to the tray
+    Board:SetConvention("none")
+    Board:Move("Thalric-Silvermoon", 4)
+    Board:SetConvention("oddeven")
+    eq(Board.draft["Thalric-Silvermoon"], 0)
+    assert(occupancyOK())
+    sharedDone()
+end)
+
+test("loadouts bring their mode", function()
+    Board:SetSource("demo")
+    ns.Split.Run(Board)
+    local split = ns.Loadouts.SaveCurrent("Split test")
+    eq(split.conv, "oddeven")
+    Board:SetConvention("none")
+    local simple = ns.Loadouts.SaveCurrent("Simple test")
+    eq(simple.conv, "none")
+    eq(ns.Loadouts.FromExport(ns.Loadouts.ToExport(simple)).conv, "none", "export keeps simple mode")
+    local groups = draftCopy()
+    -- a split loadout turns simple mode off
+    Board.switched = nil
+    ns.Loadouts.Load(split.id)
+    eq(ns.settings.conv, "oddeven")
+    eq(Board.switched, "split")
+    -- a simple loadout turns it on
+    Board.switched = nil
+    ns.Loadouts.Load(simple.id)
+    eq(ns.settings.conv, "none")
+    eq(Board.switched, "simple")
+    for k, v in pairs(groups) do eq(Board.draft[k], v, k) end
+    -- between split conventions the current one stays
+    Board:SetConvention("split")
+    Board.switched = nil
+    ns.Loadouts.Load(split.id)
+    eq(ns.settings.conv, "split")
+    eq(Board.switched, nil)
+    -- editing a loadout without a raid switches too
+    Board:SetSource("none")
+    ns.Loadouts.Load(simple.id)
+    eq(Board.source, "loadout")
+    eq(ns.settings.conv, "none")
+    ns.Loadouts.Delete(split.id)
+    ns.Loadouts.Delete(simple.id)
+    Board.switched = nil
+    Board:SetConvention("oddeven")
+    Board:SetSource("demo")
+end)
+
+test("auto-fill in simple mode", function()
+    Board:SetSource("demo")
+    Board:SetConvention("none")
+    local lo = ns.Loadouts.SaveCurrent("Simple fill")
+    local a, b = "Thalric-Silvermoon", "Arrowyn-Silvermoon"
+    local ga = lo.groups[a]
+    lo.groups[a], lo.groups[b] = nil, nil
+    lo.groups["Ghosty-Silvermoon"] = ga
+    lo.info["Ghosty-Silvermoon"] = { c = lo.info[a].c, s = lo.info[a].s }
+    ns.Loadouts.Load(lo.id)
+    eq(Board.loaded.absent, 1)
+    eq(Board.loaded.fresh, 2)
+    eq(Board:AutoFill(), 2)
+    eq(Board.draft[a], ga, "same spec takes the absent slot")
+    eq(Board.subs[a], "Ghosty-Silvermoon")
+    assert(Board.draft[b] >= 1 and Board.draft[b] <= Board:K(), "leftover in a free group")
+    assert(occupancyOK())
+    ns.Loadouts.Delete(lo.id)
+    Board:SetConvention("oddeven")
+    Board:SetSource("demo")
+end)
+
 print(string.format("%d passed, %d failed", passed, failed))
 if failed > 0 then os.exit(1) end
