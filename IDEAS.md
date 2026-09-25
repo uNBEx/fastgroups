@@ -33,5 +33,5 @@ rest of the addon: nothing costs anything until the user turns it on.
 
 ## Quality of life
 - Keybinding to toggle the window.
-- Localization (strings are already kept in one table).
+- Localization (user-facing strings are inline English today; move them to a table first).
 - Raid markers per half (for example Star = left, Circle = right) set on Apply.

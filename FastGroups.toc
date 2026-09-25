@@ -1,0 +1,39 @@
+## Interface: 120100, 120105
+## Title: FastGroups
+## Notes: Raid group sorting for raid leaders: drag and drop, balanced halves, saved loadouts.
+## Author: uNBEx
+## Version: @project-version@
+## SavedVariables: FastGroupsDB
+## IconTexture: Interface\AddOns\FastGroups\Media\Icons\logo
+## AddonCompartmentFunc: FastGroups_OnAddonCompartmentClick
+## AddonCompartmentFuncOnEnter: FastGroups_OnAddonCompartmentEnter
+## AddonCompartmentFuncOnLeave: FastGroups_OnAddonCompartmentLeave
+## Category: Raid
+
+Libs\LibStub\LibStub.lua
+Libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
+Libs\LibDataBroker-1.1\LibDataBroker-1.1.lua
+Libs\LibDBIcon-1.0\LibDBIcon-1.0.lua
+
+Core\Init.lua
+Core\Data.lua
+Core\Players.lua
+Core\Raid.lua
+Core\Board.lua
+Core\Split.lua
+Core\Loadouts.lua
+Core\Rosters.lua
+Core\Apply.lua
+Core\Demo.lua
+Core\Inspect.lua
+Core\Serialize.lua
+Core\Comm.lua
+
+UI\Theme.lua
+UI\Widgets.lua
+UI\Main.lua
+UI\GroupsPage.lua
+UI\RostersPage.lua
+UI\SharePage.lua
+UI\OptionsPage.lua
+UI\Minimap.lua

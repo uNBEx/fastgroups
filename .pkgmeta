@@ -1,0 +1,10 @@
+package-as: FastGroups
+
+ignore:
+  - tests
+  - tools
+  - resources
+  - CLAUDE.md
+  - CLAUDE.local.md
+  - IDEAS.md
+  - .luacheckrc
