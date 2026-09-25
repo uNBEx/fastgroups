@@ -26,7 +26,7 @@ read_globals = {
     "CanInspect", "ClearInspectPlayer", "ColorPickerFrame", "CreateColor", "CreateFrame",
     "GameTooltip", "GetClassAtlas", "GetDifficultyInfo", "GetGuildRosterInfo", "GetCursorPosition", "GetInstanceInfo",
     "GetLocale", "GetNormalizedRealmName", "GetNumGuildMembers", "GetRaidDifficultyID", "GetRaidRosterInfo",
-    "GetRealmName", "GetSpecializationInfoByID", "InCombatLockdown", "InspectFrame", "IsEveryoneAssistant", "IsInGroup", "IsInGuild", "IsInRaid",
+    "GetRealmName", "GetSpecializationInfoByID", "HasLFGRestrictions", "InCombatLockdown", "InspectFrame", "IsEveryoneAssistant", "IsInGroup", "IsInGuild", "IsInRaid",
     "LibStub", "NotifyInspect", "SetCursor", "SetRaidSubgroup", "StaticPopup_Show",
     "SwapRaidSubgroup", "UIParent", "UnitAffectingCombat", "UnitGUID", "UnitGroupRolesAssigned",
     "UnitIsConnected", "UnitIsGroupAssistant", "UnitIsGroupLeader", "UnitIsUnit", "UnitIsVisible", "UnitName",

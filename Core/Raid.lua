@@ -116,6 +116,27 @@ function Raid:SetRank(key, rank)
     end
 end
 
+-- Same rules as Blizzard's raid "Remove" entry: leader or assistant, no LFG
+-- group; the leader cannot remove themselves, an assistant cannot remove the
+-- leader or another assistant (themselves included).
+function Raid.CanRemoveRank(myRank, rank, isSelf)
+    if myRank == "leader" then return not isSelf end
+    if myRank == "assist" then return rank == 0 end
+    return false
+end
+
+function Raid:CanRemove(key)
+    local m = self.members[key]
+    if not m or HasLFGRestrictions() then return false end
+    return Raid.CanRemoveRank(self:MyRank(), m.rank, UnitIsUnit(m.unit, "player"))
+end
+
+-- Server-async; the roster update that follows drops them from the board.
+function Raid:Remove(key)
+    if not self:CanRemove(key) then return end
+    C_PartyInfo.UninviteUnit(self.members[key].name, nil, true)
+end
+
 function Raid:MyRank()
     if not IsInRaid() then return nil end
     if UnitIsGroupLeader("player") then return "leader" end

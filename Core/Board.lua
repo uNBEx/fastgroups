@@ -162,6 +162,24 @@ function Board:IsGhost(key)
     return nil
 end
 
+-- True for a raid member who is logged out (for example switching to an alt).
+function Board:IsOffline(key)
+    local live = self:Live()
+    local m = live and live[key]
+    return m ~= nil and not m.online
+end
+
+-- Fills `out` with the keys drafted into bench groups (above K), sorted.
+function Board:BenchKeys(out)
+    wipe(out)
+    local k = self:K()
+    for _, key in ipairs(self.members) do
+        local g = self.draft[key]
+        if g and g > k then out[#out + 1] = key end
+    end
+    return Board.SortKeys(out)
+end
+
 -- Keys whose draft group differs from their live group.
 function Board:Pending(out)
     local n = 0
@@ -194,11 +212,12 @@ end
 
 local countTables = { L = { cls = {} }, R = { cls = {} } }
 
--- Per-half counts: T, H, M, R, U (unknown position), n, cls[class].
+-- Per-half counts: T, H, M, R, U (unknown position), n, off (offline), cls[class].
 function Board:Counts(side)
     local c = countTables[side]
-    c.T, c.H, c.M, c.R, c.U, c.n = 0, 0, 0, 0, 0, 0
+    c.T, c.H, c.M, c.R, c.U, c.n, c.off = 0, 0, 0, 0, 0, 0, 0
     wipe(c.cls)
+    local live = self:Live()
     local L, R = self:Halves()
     local groups = side == "L" and L or R
     for _, key in ipairs(self.members) do
@@ -212,6 +231,8 @@ function Board:Counts(side)
             local b = info.bucket
             if b == "?" then c.U = c.U + 1 else c[b] = c[b] + 1 end
             c.n = c.n + 1
+            local m = live and live[key]
+            if m and not m.online then c.off = c.off + 1 end
             if info.class then c.cls[info.class] = (c.cls[info.class] or 0) + 1 end
         end
     end

@@ -71,7 +71,10 @@ function InCombatLockdown() return false end
 function UnitIsGroupLeader() return true end
 function UnitIsGroupAssistant() return false end
 function IsEveryoneAssistant() return false end
+function HasLFGRestrictions() return false end
+stub.uninvited = {}     -- names passed to UninviteUnit
 C_PartyInfo = {
+    UninviteUnit = function(name) table.insert(stub.uninvited, name) end,
     PromoteToLeader = function(name) stub.promoted = { name, 2 } end,
     PromoteToAssistant = function(name) stub.promoted = { name, 1 } end,
     DemoteAssistant = function(name) stub.promoted = { name, 0 } end,

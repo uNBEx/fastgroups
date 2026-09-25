@@ -20,6 +20,9 @@ local ABSENT = { { "Brakka", 71 }, { "Selvyn", 267 }, { "Morvash", 251 } }
 -- roster index -> raid rank (2 = leader, 1 = assistant)
 local RANKS = { [1] = 2, [2] = 1, [11] = 1 }
 
+-- roster index -> offline (logged out, for example to switch to an alt)
+local OFFLINE = { [19] = true }
+
 local SAMPLE_NAME = "[Demo] Last week"
 
 local function key(name) return name .. "-" .. REALM end
@@ -36,7 +39,7 @@ function Demo:Start()
         local sd = ns.Data.SPECS[row[2]]
         self.members[key(row[1])] = {
             index = i, group = math.floor((i - 1) / 5) + 1, rank = RANKS[i] or 0,
-            online = true, class = sd[1], role = sd[2], unit = "player",
+            online = not OFFLINE[i], class = sd[1], role = sd[2], unit = "player",
         }
     end
     for _, row in ipairs(ABSENT) do addTemp(row[1], row[2]) end
@@ -54,6 +57,17 @@ function Demo:SetRank(k, rank)
     end
     m.rank = rank
     ns.Board:Changed()
+end
+
+-- Stand-in for Raid:Remove. The demo player is the leader and not on the roster.
+function Demo:CanRemove(k)
+    return self.members[k] ~= nil
+end
+
+function Demo:Remove(k)
+    if not self.members[k] then return end
+    self.members[k] = nil
+    ns.Board:Sync()
 end
 
 -- A loadout that misses three of today's players and has three absentees,

@@ -295,6 +295,41 @@ test("rank changes redraw and promotions use the roster name", function()
     Board:SetSource("none")
 end)
 
+test("offline members, remove rules and uninvite by roster name", function()
+    local roster = { { "Alpha", 2, true }, { "Bravo-Stormrage", 1, true }, { "Charlie", 0, false } }
+    local saved = GetRaidRosterInfo
+    GetRaidRosterInfo = function(i)
+        local r = roster[i]
+        if r then return r[1], r[2], 6, 80, "MAGE", "MAGE", "", r[3], false, "", false, "DAMAGER" end
+    end
+    stub.inRaid = true
+    Board:SetSource("live")
+    eq(Board:IsOffline("Charlie-Silvermoon"), true)
+    eq(Board:IsOffline("Alpha-Silvermoon"), false)
+    local fired = 0
+    ns.On("BOARD_CHANGED", "test", function() fired = fired + 1 end)
+    roster[3][3] = true
+    Board:AutoSource()
+    eq(fired, 1, "coming back online redraws")
+    eq(Board:IsOffline("Charlie-Silvermoon"), false)
+    ns.On("BOARD_CHANGED", "test", nil)
+    local keys = {}
+    Board:BenchKeys(keys)
+    eq(#keys, 3, "group 6 is bench on a 4 group board")
+    local R = ns.Raid.CanRemoveRank
+    eq(R("leader", 1, false), true)
+    eq(R("leader", 2, true), false, "leader cannot remove themselves")
+    eq(R("assist", 0, false), true)
+    eq(R("assist", 1, false), false, "assistant cannot remove another assistant")
+    eq(R("assist", 2, false), false)
+    eq(R("member", 0, false), false)
+    ns.Raid:Remove("Charlie-Silvermoon")
+    eq(stub.uninvited[#stub.uninvited], "Charlie", "same realm players go by their roster name")
+    GetRaidRosterInfo = saved
+    stub.inRaid = false
+    Board:SetSource("none")
+end)
+
 ---------------------------------------------------------------------------
 test("inspect queue paces, retries and rechecks ambiguous specs", function()
     local Inspect = ns.Inspect

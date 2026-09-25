@@ -100,25 +100,38 @@ end
 local INK = T.C.ink
 local WHITE = { 1, 1, 1 }
 
--- Paint a card for `key`. ghost = absent loadout player.
+-- Paint a card for `key`. ghost = absent loadout player. Offline raid
+-- members are drawn dark and gray with only a faint class stripe, so they
+-- stand out from both styles without looking like an absent ghost.
 local function fillCard(c, key, ghost)
     local s = ns.settings
     local info = Players.Get(key)
     local r, g, b = Data.ClassColor(info.class)
     c.key, c.ghost = key, ghost
     local subtle = s.cardStyle == "subtle"
+    local live = Board:Live()
+    local m = not ghost and live and live[key]
+    local offline = m and not m.online
+    local faded = ghost or offline
 
     -- background
-    if ghost then
+    if offline then
+        local pr, pg, pb = T.Color("panel")
+        c.bg:SetGradient("HORIZONTAL", CreateColor(pr, pg, pb, 1), CreateColor(pr, pg, pb, 1))
+        c.stripe:SetVertexColor(r, g, b, 0.45)
+        c.stripe:Show()
+        c.ring:SetVertexColor(T.Color("line2"))
+        c.ring:Show()
+    elseif ghost then
         local wr, wg, wb = T.Color("win")
         c.bg:SetGradient("HORIZONTAL", CreateColor(wr, wg, wb, 1), CreateColor(wr, wg, wb, 1))
         c.ring:SetVertexColor(r, g, b, 0.5)
         c.ring:Show()
         c.stripe:Hide()
     elseif subtle then
+        c.stripe:SetVertexColor(r, g, b, 1)
         local pr, pg, pb = T.Color("panel2")
         c.bg:SetGradient("HORIZONTAL", CreateColor(pr, pg, pb, 1), CreateColor(pr, pg, pb, 1))
-        c.stripe:SetVertexColor(r, g, b)
         c.stripe:Show()
         c.ring:Hide()
     else
@@ -141,23 +154,23 @@ local function fillCard(c, key, ghost)
         c.spec:SetTexture(T.ICON .. "pos_unknown")
         c.spec:SetVertexColor(T.Color("muted"))
     end
-    c.spec:SetDesaturated(ghost and true or false)
-    c.spec:SetAlpha(ghost and 0.45 or 1)
+    c.spec:SetDesaturated(faded and true or false)
+    c.spec:SetAlpha(faded and 0.45 or 1)
 
     -- role and position
     local rk = T.ROLE_KEY[info.role] or "D"
     c.role:SetTexture(T.ICON .. T.ROLE_ICON[rk])
-    if subtle or ghost then
+    if subtle or faded then
         c.role:SetVertexColor(T.Color(T.ROLE_COLOR[rk]))
     else
         c.role:SetVertexColor(1, 1, 1)
     end
-    c.role:SetAlpha(ghost and 0.4 or (info.roleKnown and 1 or 0.5))
+    c.role:SetAlpha(faded and 0.4 or (info.roleKnown and 1 or 0.5))
     local anchor = c.role
     if info.role == "DAMAGER" then
         c.pos:SetTexture(T.ICON .. T.POS_ICON[info.pos or "?"])
-        c.pos:SetVertexColor(1, 1, 1, ghost and 0.4 or 1)
-        c.posBg:SetVertexColor(0, 0, 0, subtle and 0.3 or 0.45)
+        c.pos:SetVertexColor(1, 1, 1, faded and 0.4 or 1)
+        c.posBg:SetVertexColor(0, 0, 0, (subtle or offline) and 0.3 or 0.45)
         c.posBg:Show()
         c.pos:Show()
         anchor = c.posBg
@@ -167,12 +180,11 @@ local function fillCard(c, key, ghost)
     end
 
     -- raid leader / assistant crown
-    local live = Board:Live()
-    local m = live and live[key]
-    local rankIcon = not ghost and m and T.RANK_ICON[m.rank]
+    local rankIcon = m and T.RANK_ICON[m.rank]
     if rankIcon then
         c.rank:SetTexture(T.ICON .. rankIcon)
-        c.rankBg:SetVertexColor(0, 0, 0, subtle and 0.3 or 0.45)
+        c.rank:SetAlpha(offline and 0.5 or 1)
+        c.rankBg:SetVertexColor(0, 0, 0, (subtle or offline) and 0.3 or 0.45)
         c.rankBg:ClearAllPoints()
         c.rankBg:SetPoint("RIGHT", anchor, "LEFT", -4, 0)
         c.rankBg:Show()
@@ -189,7 +201,7 @@ local function fillCard(c, key, ghost)
     c.sub:ClearAllPoints()
     c.name:SetPoint("LEFT", c.specBorder, "RIGHT", 6, 0)
     c.name:SetPoint("RIGHT", anchor, "LEFT", -4, 0)
-    if ghost then
+    if faded then
         W.SetFont(c.name, 11.5, "bold")
         c.name:SetTextColor(T.Color("muted"))
         c.name:SetShadowOffset(0, 0)
@@ -209,8 +221,8 @@ local function fillCard(c, key, ghost)
         local label = specName or Data.ClassName(info.class)
         if info.posManual then label = label .. " *" end
         c.sub:SetText(label)
-        if ghost or subtle then
-            c.sub:SetTextColor(T.Color(ghost and "dim" or "muted"))
+        if faded or subtle then
+            c.sub:SetTextColor(T.Color(faded and "dim" or "muted"))
             c.sub:SetShadowOffset(0, 0)
         else
             c.sub:SetTextColor(1, 1, 1, 0.88)
@@ -225,6 +237,8 @@ local function fillCard(c, key, ghost)
     -- tags
     if ghost then
         setTag(c, "ABSENT", T.C.danger, WHITE)
+    elseif offline then
+        setTag(c, "OFFLINE", T.C.muted, INK)
     elseif Board.subs[key] then
         setTag(c, "for " .. Players.ShortName(Board.subs[key]), T.C.ink, { T.Accent() })
     elseif Board.tags[key] == "new" then
@@ -237,7 +251,7 @@ local function fillCard(c, key, ghost)
 
     -- pending move marker
     local g2 = Board.draft[key]
-    local moved = not ghost and m and g2 and g2 > 0 and g2 ~= m.group
+    local moved = m and g2 and g2 > 0 and g2 ~= m.group
     c.dot:SetShown(moved and true or false)
     c.dotBg:SetShown(moved and true or false)
     if moved then c.dot:SetVertexColor(T.Accent()) end
@@ -408,6 +422,20 @@ local function rankMenu(root, key)
     end
 end
 
+-- The live raid, or the demo standing in for it.
+local function raidOps()
+    if Board.source == "demo" then return ns.Demo end
+    if Board.source == "live" then return ns.Raid end
+    return nil
+end
+
+local function removeMenu(root, key)
+    local ops = raidOps()
+    if not ops or not ops:CanRemove(key) then return end
+    root:CreateDivider()
+    root:CreateButton("|c" .. T.Hex(T.Color("danger")) .. "Remove from raid|r", function() ops:Remove(key) end)
+end
+
 local function cardMenu(c)
     local key = c.key
     local info = Players.Get(key)
@@ -466,6 +494,7 @@ local function cardMenu(c)
             end)
         end
         rankMenu(root, key)
+        removeMenu(root, key)
     end)
 end
 
@@ -954,6 +983,10 @@ function Page:Build(f)
         ns.settings.benchOpen = not ns.settings.benchOpen
         Page:Refresh()
     end)
+    bench.remove = W.Button(bench.head, { text = "Remove from raid", icon = "trash", kind = "ghost", height = 24,
+        onClick = function() Page:OnRemoveBench() end,
+        tooltip = "Remove everyone on the bench from the raid. Asks first." })
+    bench.remove:SetPoint("RIGHT", -8, 0)
     self.bench = bench
 
     -- empty state
@@ -1121,6 +1154,40 @@ function Page:OnApply()
     else
         go()
     end
+end
+
+-- Everyone drafted to the bench, split into who we may remove and who not.
+local benchKeys = {}
+
+function Page:OnRemoveBench()
+    local ops = raidOps()
+    if not ops then return end
+    Board:BenchKeys(benchKeys)
+    local names, kept = {}, {}
+    for _, key in ipairs(benchKeys) do
+        local info = Players.Get(key)
+        local name = "|c" .. T.ClassHex(info.class) .. info.name .. "|r"
+        tinsert(ops:CanRemove(key) and names or kept, name)
+    end
+    local n = #names
+    if n == 0 then return end
+    local text = table.concat(names, ", ")
+    if #kept > 0 then
+        text = text .. "\n\nStaying (you cannot remove them): " .. table.concat(kept, ", ")
+    end
+    UI.Confirm("Remove " .. n .. " bench player" .. (n == 1 and "" or "s") .. " from the raid?", text,
+        "Remove " .. n, function()
+            Board:BenchKeys(benchKeys)
+            local done = 0
+            for i = #benchKeys, 1, -1 do
+                local key = benchKeys[i]
+                if ops:CanRemove(key) then
+                    ops:Remove(key)
+                    done = done + 1
+                end
+            end
+            UI.Toast("Removed " .. done .. " player" .. (done == 1 and "" or "s") .. " from the raid.", "ok")
+        end, true)
 end
 
 function Page:OnBannerClose()
@@ -1313,10 +1380,20 @@ function Page:LayoutBench(width, y)
     bench:ClearAllPoints()
     bench:SetPoint("TOPLEFT", 0, -y)
     bench:SetWidth(width)
-    local count = 0
+    local count, off, removable = 0, 0, 0
     for g = k + 1, 8 do count = count + Board:Occupancy(g) end
+    local ops = raidOps()
+    for _, key in ipairs(Board:BenchKeys(benchKeys)) do
+        if Board:IsOffline(key) then off = off + 1 end
+        if ops and ops:CanRemove(key) then removable = removable + 1 end
+    end
     bench.meta:SetText("groups " .. (k + 1) .. "-8  -  " .. count .. " player" .. (count == 1 and "" or "s")
+        .. (off > 0 and (", " .. off .. " offline") or "")
         .. (Board:IsMythic() and k == 4 and "  -  outside the Mythic 20" or ""))
+    bench.remove:SetShown(ops ~= nil and #benchKeys > 0)
+    bench.remove:SetDisabled(removable == 0 or ns.Apply.running,
+        ns.Apply.running and "Wait until Apply has finished."
+        or "Only the raid leader, or an assistant for regular members, can remove players.")
     local open = ns.settings.benchOpen
     bench.chev:SetRotation(open and -math.pi / 2 or 0)
     local h = 36

@@ -12,6 +12,9 @@ rest of the addon: nothing costs anything until the user turns it on.
   role and buff coverage (the user decides, the addon only highlights).
 - **Buff coverage per half**: show which raid buffs / debuffs each half has (for example the DH
   and Monk damage-taken debuffs) instead of plain class counts.
+- **Remove offline players**: one button next to the bench one, with the same confirmation.
+- **Offline for how long**: remember when a member went offline (only while the window is open)
+  and show "offline 4m" in the tooltip.
 - **Minimal-move solver**: replace the greedy placement with a small assignment solver so Apply
   needs the fewest possible swaps.
 

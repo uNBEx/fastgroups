@@ -71,7 +71,13 @@ tools/                  check.sh, deploy.sh, gen_media.py
 - LibSpecialization (BigWigs and others) protocol, prefix "LibSpec": "R" asks the group, replies and
   spec/talent changes are "<specID>,<talent string>". The library keeps no cache and its
   RequestGroupSpecialization is a no-op, so we listen from login and send "R" once per group.
-- Unverified: `PLAYER_SPECIALIZATION_CHANGED` firing for other raid members in 12.1.
+- `C_PartyInfo.UninviteUnit(name, reason, exactNameMatch)`: rules copied from Blizzard's raid
+  "Remove" entry (UnitPopupSetRaidRemoveButtonMixin): leader or assist, no `HasLFGRestrictions()`;
+  the leader cannot remove themselves, an assistant only removes regular members.
+- Blizzard's raid panel listens to `UNIT_CONNECTION` besides `GROUP_ROSTER_UPDATE` for online state;
+  we do the same while the window is open.
+- Unverified: `PLAYER_SPECIALIZATION_CHANGED` firing for other raid members in 12.1; several
+  `UninviteUnit` calls in one click (bench removal) all going through.
 - `C_EncodingUtil.SerializeCBOR / CompressString(s, 0) / EncodeBase64` and reverses (11.1.5+).
 - Addon comms blocked during encounters and M+ (`C_ChatInfo.InChatMessagingLockdown()`); each
   prefix has a 10 message allowance; `SendAddonMessage` returns `Enum.SendAddonMessageResult`

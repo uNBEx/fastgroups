@@ -634,6 +634,12 @@ local function onRoster()
     UI.RefreshStatus()
 end
 
+-- Blizzard's raid panel listens for this besides GROUP_ROSTER_UPDATE, so a
+-- logout may not come with a roster update. Raid.version skips the rest.
+local function onConnection(_, _, unit)
+    if unit and unit:find("^raid") then onRoster() end
+end
+
 local function onCombat()
     UI.RefreshStatus()
     UI.RefreshPage()
@@ -739,6 +745,7 @@ local function build()
 
     frame:SetScript("OnShow", function()
         ns.RegisterEvent(UI, "GROUP_ROSTER_UPDATE", onRoster)
+        ns.RegisterEvent(UI, "UNIT_CONNECTION", onConnection)
         ns.RegisterEvent(UI, "PLAYER_REGEN_DISABLED", onCombat)
         ns.RegisterEvent(UI, "PLAYER_REGEN_ENABLED", onCombatEnd)
         ns.RegisterEvent(UI, "PLAYER_DIFFICULTY_CHANGED", onDifficulty)
@@ -750,6 +757,7 @@ local function build()
     end)
     frame:SetScript("OnHide", function()
         ns.UnregisterEvent(UI, "GROUP_ROSTER_UPDATE")
+        ns.UnregisterEvent(UI, "UNIT_CONNECTION")
         ns.UnregisterEvent(UI, "PLAYER_REGEN_DISABLED")
         ns.UnregisterEvent(UI, "PLAYER_REGEN_ENABLED")
         ns.UnregisterEvent(UI, "PLAYER_DIFFICULTY_CHANGED")

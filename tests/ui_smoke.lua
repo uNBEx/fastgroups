@@ -113,6 +113,45 @@ step("card context menus", function()
     local c = cardFor("Vexmora-Silvermoon")
     c.scripts.OnClick(c, "RightButton")
     for _, fn in ipairs(menuCalls(ns.W.menuRoot)) do fn() end
+    -- the last entry removed her from the raid
+    check(not ns.Demo.members["Vexmora-Silvermoon"], "removed from demo raid")
+    check(not Board.isMember["Vexmora-Silvermoon"], "removed from board")
+    Board:SetSource("demo")
+    check(#groups.activeCards == 20, "demo restored")
+end)
+
+local function modalButton(label)
+    for _, o in ipairs(M.objects) do
+        if o._kind == "Button" and o.label and o.label._text == label and o:IsVisible() then return o end
+    end
+end
+
+step("offline player is marked", function()
+    local c = cardFor("Stormjaw-Silvermoon")
+    check(c.tag:IsShown() and c.tag.text._text == "OFFLINE", "offline tag")
+    check(not cardFor("Thalric-Silvermoon").tag:IsShown(), "online has no tag")
+end)
+
+step("remove the bench from the raid", function()
+    ns.settings.benchOpen = true
+    groups:Refresh()
+    check(not groups.bench.remove:IsShown(), "no button for an empty bench")
+    Board:Move("Stormjaw-Silvermoon", 5)
+    Board:Move("Arrowyn-Silvermoon", 6)
+    check(groups.bench.meta._text:find("1 offline"), "bench meta counts offline: " .. groups.bench.meta._text)
+    local b = groups.bench.remove
+    check(b:IsShown() and not b.disabled, "button enabled")
+    b.scripts.OnClick(b, "LeftButton")
+    check(ns.Demo.members["Arrowyn-Silvermoon"], "nothing removed before confirming")
+    modalButton("Cancel").scripts.OnClick(modalButton("Cancel"))
+    check(ns.Demo.members["Arrowyn-Silvermoon"], "cancel keeps them")
+    b.scripts.OnClick(b, "LeftButton")
+    local ok = modalButton("Remove 2")
+    check(ok, "confirm button")
+    ok.scripts.OnClick(ok)
+    check(not ns.Demo.members["Arrowyn-Silvermoon"] and not ns.Demo.members["Stormjaw-Silvermoon"], "bench removed")
+    check(not b:IsShown(), "button hidden again")
+    Board:SetSource("demo")
 end)
 
 step("source dropdown toggles and opens submenus", function()
