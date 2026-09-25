@@ -15,6 +15,7 @@ local Board = {
     subs = {},          -- key -> absent key this player replaces
     tags = {},          -- key -> "new" | "ret"
     lastLive = {},      -- key -> live group at the previous sync
+    liveVersion = nil,  -- ns.Raid.version the board last synced with
     loaded = nil,       -- reconcile summary of the loaded loadout
     activeLoadout = nil,
 }
@@ -287,6 +288,7 @@ function Board:SetSource(src, id)
     if src == "live" or src == "demo" then
         if src == "live" then
             ns.Raid:Refresh()
+            self.liveVersion = ns.Raid.version
         else
             ns.Demo:Start()
         end
@@ -322,7 +324,9 @@ end
 function Board:AutoSource(force)
     if IsInRaid() then
         if self.source == "live" then
-            self:Sync()
+            -- roster events come in bursts; only merge when something changed
+            ns.Raid:Refresh()
+            if self.liveVersion ~= ns.Raid.version then self:Sync() end
         elseif force or self.source == "none" then
             self:SetSource("live")
         end
@@ -337,6 +341,7 @@ function Board:Sync()
     if not self:IsLiveLike() then return end
     local live = self:Live()
     local applying = ns.Apply and ns.Apply.running
+    if self.source == "live" then self.liveVersion = ns.Raid.version end
     for key, m in pairs(live) do
         if not self.isMember[key] then
             if self.loaded then

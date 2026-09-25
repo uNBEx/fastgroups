@@ -236,6 +236,39 @@ test("sync follows live moves and drops leavers", function()
     eq(Board.isMember["Aurelia-Silvermoon"], nil)
 end)
 
+test("live board picks up joiners and leavers on roster events", function()
+    local roster = {
+        { "Alpha", 1, "WARRIOR" }, { "Bravo", 1, "PRIEST" }, { "Charlie", 2, "MAGE" },
+    }
+    local saved = GetRaidRosterInfo
+    GetRaidRosterInfo = function(i)
+        local r = roster[i]
+        if r then return r[1], 0, r[2], 80, r[3], r[3], "", true, false, "", false, "DAMAGER" end
+    end
+    stub.inRaid = true
+    Board:SetSource("none")
+    Board:AutoSource()
+    eq(Board.source, "live")
+    eq(#Board.members, 3)
+    local fired = 0
+    ns.On("BOARD_CHANGED", "test", function() fired = fired + 1 end)
+    Board:AutoSource()
+    eq(fired, 0, "unchanged roster does not redraw")
+    roster[4] = { "Delta", 2, "ROGUE" }
+    Board:AutoSource()
+    eq(fired, 1)
+    eq(Board.draft["Delta-Silvermoon"], 2, "joiner placed in live group")
+    table.remove(roster, 1)
+    Board:AutoSource()
+    eq(Board.isMember["Alpha-Silvermoon"], nil, "leaver removed")
+    eq(#Board.members, 3)
+    ns.On("BOARD_CHANGED", "test", nil)
+    GetRaidRosterInfo = saved
+    stub.inRaid = false
+    Board:AutoSource()
+    eq(Board.source, "none")
+end)
+
 ---------------------------------------------------------------------------
 test("serialize round trip and rejects junk", function()
     Board:SetSource("demo")
