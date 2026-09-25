@@ -23,6 +23,10 @@ local function new(kind, parent)
     }, Obj)
     table.insert(M.objects, o)
     table.insert(stub.frames, o)
+    if parent then
+        parent._kids = parent._kids or {}
+        table.insert(parent._kids, o)
+    end
     return o
 end
 M.new = new
@@ -68,7 +72,26 @@ function Obj:GetStringHeight() return 14 end
 function Obj:CreateTexture() return new("Texture", self) end
 function Obj:CreateFontString() return new("FontString", self) end
 function Obj:GetParent() return self._parent end
-function Obj:SetParent(p) self._parent = p end
+function Obj:SetParent(p)
+    self._parent = p
+    if p then
+        p._kids = p._kids or {}
+        table.insert(p._kids, self)
+    end
+end
+local REGION = { Texture = true, FontString = true }
+local function kids(self, regions)
+    local out, seen = {}, {}
+    for _, o in ipairs(self._kids or {}) do
+        if o._parent == self and not seen[o] and (REGION[o._kind] or false) == regions then
+            seen[o] = true
+            out[#out + 1] = o
+        end
+    end
+    return unpack(out)
+end
+function Obj:GetChildren() return kids(self, false) end
+function Obj:GetRegions() return kids(self, true) end
 function Obj:GetFrameLevel() return 1 end
 function Obj:GetEffectiveScale() return 1 end
 function Obj:GetScale() return 1 end

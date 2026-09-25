@@ -98,6 +98,7 @@ function Page:Build(f)
             for k in pairs(s()) do s()[k] = nil end
             for k, v in pairs(fresh) do s()[k] = v end
             T.SetAccent(unpack(s().accent))
+            W.RefreshShapes()
             ns.UI.Minimap.Update()
             ns.Comm.Listen(s().acceptFrom ~= "never")
             changed("scale")
@@ -148,6 +149,7 @@ function Page:Build(f)
     app:AddRow("Accent color", nil, sw)
     app:AddRow("Card style", "Filled class color, or dark with a class stripe",
         seg({ { "filled", "Filled" }, { "subtle", "Subtle" } }, "cardStyle"))
+    app:AddRow("Square corners", "Off for rounded corners", toggle("squareCorners", W.RefreshShapes))
     app:AddRow("Spec name on cards", nil, toggle("showSpec"))
     local scaleText
     local slider = W.Slider(UIParent, 150, 0.7, 1.3, 0.05, function() return s().scale end,

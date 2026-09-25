@@ -12,6 +12,8 @@ T.TEX = {
     ring = MEDIA .. "ring6",
     round3 = MEDIA .. "round3",
     circle = MEDIA .. "circle",
+    square = MEDIA .. "square",
+    ring0 = MEDIA .. "ring0",
     white = "Interface\\Buttons\\WHITE8X8",
 }
 

@@ -270,6 +270,7 @@ local function onCardDragStart(c)
     local main = UI.Frame()
     if not dragCard then
         dragCard = createCard(UIParent)
+        W.AddShapeRoot(dragCard)
         dragCard:EnableMouse(false)
         dragCard:SetMovable(true)
         dragCard:SetFrameStrata("TOOLTIP")

@@ -418,12 +418,9 @@ local function buildSidebar()
     sidebar:SetPoint("TOPLEFT", 1, -TITLE_H)
     sidebar:SetPoint("BOTTOMLEFT", 1, 1)
     sidebar:SetWidth(SIDEBAR_W)
-    -- background with only the bottom-left corner rounded
+    -- background with only the bottom-left corner shaped
     local r, g, b = T.Color("side")
-    local corner = sidebar:CreateTexture(nil, "BACKGROUND")
-    corner:SetTexture(T.TEX.round)
-    corner:SetTexCoord(0, 0.5, 0.5, 1)
-    corner:SetVertexColor(r, g, b)
+    local corner = W.Round(sidebar, "BACKGROUND", "corner", r, g, b)
     corner:SetSize(16, 16)
     corner:SetPoint("BOTTOMLEFT")
     local main = W.Rect(sidebar, "BACKGROUND", r, g, b)
@@ -654,6 +651,7 @@ end
 
 local function build()
     frame = CreateFrame("Frame", "FastGroupsMainFrame", UIParent)
+    W.AddShapeRoot(frame)
     frame:SetFrameStrata("HIGH")
     frame:SetToplevel(true)
     frame:SetClampedToScreen(true)
