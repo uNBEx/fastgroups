@@ -42,7 +42,11 @@ function Obj:GetWidth()
 end
 function Obj:GetHeight() return (self._h and self._h > 0) and self._h or 20 end
 function Obj:GetSize() return self:GetWidth(), self:GetHeight() end
-function Obj:Show() self._shown = true end
+function Obj:Show()
+    local was = self._shown
+    self._shown = true
+    if not was and self.scripts.OnShow then self.scripts.OnShow(self) end
+end
 function Obj:Hide()
     local was = self._shown
     self._shown = false

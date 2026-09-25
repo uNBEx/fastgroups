@@ -651,6 +651,8 @@ end
 
 local function build()
     frame = CreateFrame("Frame", "FastGroupsMainFrame", UIParent)
+    -- new frames start shown; hide it so the first Show runs OnShow
+    frame:Hide()
     W.AddShapeRoot(frame)
     frame:SetFrameStrata("HIGH")
     frame:SetToplevel(true)

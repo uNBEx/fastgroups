@@ -36,6 +36,11 @@ step("open window without a raid", function()
     check(UI.Frame():IsShown(), "window shown")
     check(Board.source == "none", "source none")
     check(groups.empty:IsShown(), "empty state shown")
+    local listening = false
+    for _, o in ipairs(stub.frames) do
+        if o.events.GROUP_ROSTER_UPDATE then listening = true end
+    end
+    check(listening, "first open runs OnShow and listens to the roster")
 end)
 
 step("demo raid renders 20 cards", function()
