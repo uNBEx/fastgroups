@@ -87,17 +87,46 @@ step("drag into the tray and back", function()
     check(Board.draft[a] == g, "moved back")
 end)
 
+-- Every callback in a menu description, submenus included.
+local function menuCalls(d, out)
+    out = out or {}
+    for _, e in ipairs(d.children or {}) do
+        if e.isSelected then e.isSelected() end
+        if e.fn then out[#out + 1] = e.fn end
+        menuCalls(e, out)
+    end
+    return out
+end
+
 step("card context menus", function()
     for _, c in ipairs(groups.activeCards) do
-        M.menuCalls = {}
+        ns.W.menuRoot = nil
         c.scripts.OnClick(c, "RightButton")
-        check(M.lastMenu and #M.lastMenu.children > 0, "menu built")
+        check(ns.W.menuRoot and #ns.W.menuRoot.children > 0, "menu built")
     end
     -- run every entry of one menu
     local c = cardFor("Vexmora-Silvermoon")
-    M.menuCalls = {}
     c.scripts.OnClick(c, "RightButton")
-    for _, fn in ipairs(M.menuCalls) do fn() end
+    for _, fn in ipairs(menuCalls(ns.W.menuRoot)) do fn() end
+end)
+
+step("source dropdown toggles and opens submenus", function()
+    local b = groups.sourceBtn
+    b.scripts.OnClick(b, "LeftButton")
+    check(#ns.W.menuRoot.children > 0, "dropdown built")
+    b.scripts.OnClick(b, "LeftButton")
+    -- hover every row of a card menu so submenus render
+    local c = cardFor("Vexmora-Silvermoon")
+    c.scripts.OnClick(c, "RightButton")
+    local before = #M.objects
+    for i = 1, before do
+        local o = M.objects[i]
+        if o.desc and o:IsVisible() and o.scripts.OnEnter then
+            o.scripts.OnEnter(o)
+            o.scripts.OnLeave(o)
+        end
+    end
+    ns.W.CloseMenu()
 end)
 
 step("auto-split, apply (demo) and revert", function()

@@ -713,7 +713,7 @@ local function sourceLabel()
 end
 
 local function sourceMenu(owner)
-    W.Menu(owner, function(_, root)
+    W.Dropdown(owner, function(_, root)
         root:CreateTitle("Show on the board")
         local live = root:CreateRadio("Live raid", function() return Board.source == "live" end, function() Board:SetSource("live") end)
         live:SetEnabled(IsInRaid())
@@ -1012,19 +1012,26 @@ function Page:RefreshToolbar()
         self.chip:SetWidth(math.floor(8 + 13 + 5 + self.chip.text:GetUnboundedStringWidth() + 10))
     end
 
-    -- narrow windows: drop button labels before things overlap
-    local leftEnd = self.groups:GetRight()
-    local chipLeft = self.chip:IsShown() and self.chip:GetLeft() or self.split:GetLeft()
-    if leftEnd and chipLeft and chipLeft < leftEnd + 8 then
-        self.split:SetLabel("")
-        self.save:SetLabel("")
-    else
-        if self.split.label:GetText() == "" then self.split:SetLabel("Auto-split") end
-        if self.save.label:GetText() == "" then self.save:SetLabel("Save") end
-    end
     local conv, groupsSeg = self.conv, self.groups
     conv:SetShown(not none)
     groupsSeg:SetShown(not none)
+
+    -- narrow windows: drop button labels before things overlap. Measure with the full labels
+    -- and sum widths instead of reading screen positions, so the result does not depend on the
+    -- previous refresh or on rects that are not resolved yet during a resize.
+    self.split:SetLabel("Auto-split")
+    self.save:SetLabel("Save")
+    local leftW = PAD + self.sourceBtn:GetWidth()
+    if not none then leftW = leftW + 6 + conv:GetWidth() + 6 + groupsSeg:GetWidth() end
+    local rightW = PAD + self.apply:GetWidth() + (running and 4 + self.stop:GetWidth() or 0)
+        + 6 + self.save:GetWidth() + (live and 4 + self.revert:GetWidth() or 0)
+        + 6 + self.split:GetWidth() + (self.chip:IsShown() and 6 + self.chip:GetWidth() or 0)
+    local tbW = self.toolbar:GetWidth()
+    if tbW < 50 then tbW = self.f:GetWidth() end
+    if leftW + 8 + rightW > tbW then
+        self.split:SetLabel("")
+        self.save:SetLabel("")
+    end
 end
 
 function Page:OnApply()

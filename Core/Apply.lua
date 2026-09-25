@@ -124,6 +124,10 @@ end
 
 function Apply:Step(force)
     if not self.running then return end
+    if not ns.Raid:CanManage() then
+        finish(false, "You are no longer the raid leader or an assistant.")
+        return
+    end
     ns.Raid:Refresh()
     if self.expect and not force then
         local m = ns.Raid.members[self.expect.key]

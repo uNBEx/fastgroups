@@ -392,6 +392,88 @@ function W.Check(parent, label, get, set)
 end
 
 ---------------------------------------------------------------------------
+-- Slim scroll bar (used by W.Scroll and multiline edit boxes)
+---------------------------------------------------------------------------
+local WHEEL_STEP = 40
+
+local function paintScrollBar(bar)
+    local hot = bar.hover or bar.dragging
+    local r, g, b = T.Color(hot and "muted" or "dim")
+    local a = hot and 1 or 0.7
+    local w = hot and 6 or 4
+    bar.top:SetSize(w, w / 2)
+    bar.mid:SetWidth(w)
+    bar.bottom:SetSize(w, w / 2)
+    bar.top:SetVertexColor(r, g, b, a)
+    bar.mid:SetVertexColor(r, g, b, a)
+    bar.bottom:SetVertexColor(r, g, b, a)
+end
+
+-- A vertical Slider on the right of the scroll frame. The Slider does the
+-- dragging; its thumb is an invisible hit area and the visible bar is a thin
+-- capsule drawn from two half circles and a rect.
+local function attachScrollBar(sf, parent)
+    local bar = CreateFrame("Slider", nil, parent)
+    bar:SetWidth(8)
+    bar:SetOrientation("VERTICAL")
+    bar:EnableMouse(true)
+    bar:SetMinMaxValues(0, 0)
+    bar:SetValue(0)
+    local thumb = bar:CreateTexture(nil, "ARTWORK")
+    thumb:SetColorTexture(0, 0, 0, 0)
+    thumb:SetSize(8, 24)
+    bar:SetThumbTexture(thumb)
+    bar.top = bar:CreateTexture(nil, "OVERLAY")
+    bar.top:SetTexture(T.TEX.circle)
+    bar.top:SetTexCoord(0, 1, 0, 0.5)
+    bar.top:SetPoint("TOP", thumb, "TOP")
+    bar.bottom = bar:CreateTexture(nil, "OVERLAY")
+    bar.bottom:SetTexture(T.TEX.circle)
+    bar.bottom:SetTexCoord(0, 1, 0.5, 1)
+    bar.bottom:SetPoint("BOTTOM", thumb, "BOTTOM")
+    bar.mid = W.Rect(bar, "OVERLAY", 1, 1, 1, 1)
+    bar.mid:SetPoint("TOP", bar.top, "BOTTOM")
+    bar.mid:SetPoint("BOTTOM", bar.bottom, "TOP")
+    paintScrollBar(bar)
+
+    local function update()
+        local range = sf:GetVerticalScrollRange() or 0
+        local cur = sf:GetVerticalScroll()
+        if cur > range then
+            sf:SetVerticalScroll(range)
+            cur = range
+        end
+        bar:SetShown(range > 0.5)
+        local h = bar:GetHeight()
+        if h > 0 then thumb:SetHeight(math.max(20, math.floor(h * h / (h + range)))) end
+        bar:SetMinMaxValues(0, range)
+        bar:SetValue(cur)
+    end
+    local function wheel(_, delta)
+        local range = sf:GetVerticalScrollRange() or 0
+        if range <= 0 then return end
+        sf:SetVerticalScroll(math.max(0, math.min(range, sf:GetVerticalScroll() - delta * WHEEL_STEP)))
+    end
+
+    sf:HookScript("OnScrollRangeChanged", update)
+    sf:HookScript("OnVerticalScroll", function(_, offset) bar:SetValue(offset) end)
+    sf:EnableMouseWheel(true)
+    sf:SetScript("OnMouseWheel", wheel)
+    bar:EnableMouseWheel(true)
+    bar:SetScript("OnMouseWheel", wheel)
+    bar:SetScript("OnSizeChanged", update)
+    bar:SetScript("OnValueChanged", function(_, v, user)
+        if user then sf:SetVerticalScroll(v) end
+    end)
+    bar:SetScript("OnEnter", function(self) self.hover = true paintScrollBar(self) end)
+    bar:SetScript("OnLeave", function(self) self.hover = false paintScrollBar(self) end)
+    bar:SetScript("OnMouseDown", function(self) self.dragging = true paintScrollBar(self) end)
+    bar:SetScript("OnMouseUp", function(self) self.dragging = false paintScrollBar(self) end)
+    bar:Hide()
+    return bar
+end
+
+---------------------------------------------------------------------------
 -- Edit boxes
 ---------------------------------------------------------------------------
 --[[ opts: width, height, placeholder, multiline, onEnter(text), onChange(text, user), fontSize ]]
@@ -405,16 +487,14 @@ function W.Edit(parent, opts)
     if opts.multiline then
         local sf = CreateFrame("ScrollFrame", nil, holder)
         sf:SetPoint("TOPLEFT", 8, -7)
-        sf:SetPoint("BOTTOMRIGHT", -18, 7)
-        local bar = CreateFrame("EventFrame", nil, holder, "MinimalScrollBar")
-        bar:SetPoint("TOPLEFT", sf, "TOPRIGHT", 4, 0)
-        bar:SetPoint("BOTTOMLEFT", sf, "BOTTOMRIGHT", 4, 0)
+        sf:SetPoint("BOTTOMRIGHT", -14, 7)
+        local bar = attachScrollBar(sf, holder)
+        bar:SetPoint("TOPLEFT", sf, "TOPRIGHT", 3, 0)
+        bar:SetPoint("BOTTOMLEFT", sf, "BOTTOMRIGHT", 3, 0)
         eb = CreateFrame("EditBox", nil, sf)
         eb:SetMultiLine(true)
         eb:SetWidth(100)
         sf:SetScrollChild(eb)
-        ScrollUtil.InitScrollFrameWithScrollBar(sf, bar)
-        sf:HookScript("OnScrollRangeChanged", function(_, _, yrange) bar:SetShown((yrange or 0) > 0.5) end)
         sf:SetScript("OnSizeChanged", function(self, w) eb:SetWidth(w) end)
         eb:SetScript("OnCursorChanged", function(self, _, y, _, h)
             local top = sf:GetVerticalScroll()
@@ -483,20 +563,16 @@ function W.Edit(parent, opts)
 end
 
 ---------------------------------------------------------------------------
--- Scroll area with Blizzard's minimal scroll bar
+-- Scroll area
 ---------------------------------------------------------------------------
 function W.Scroll(parent)
     local sf = CreateFrame("ScrollFrame", nil, parent)
-    local bar = CreateFrame("EventFrame", nil, parent, "MinimalScrollBar")
-    bar:SetPoint("TOPLEFT", sf, "TOPRIGHT", 3, -2)
-    bar:SetPoint("BOTTOMLEFT", sf, "BOTTOMRIGHT", 3, 2)
+    local bar = attachScrollBar(sf, parent)
+    bar:SetPoint("TOPLEFT", sf, "TOPRIGHT", 2, -2)
+    bar:SetPoint("BOTTOMLEFT", sf, "BOTTOMRIGHT", 2, 2)
     local child = CreateFrame("Frame", nil, sf)
     child:SetSize(10, 10)
     sf:SetScrollChild(child)
-    ScrollUtil.InitScrollFrameWithScrollBar(sf, bar)
-    sf:HookScript("OnScrollRangeChanged", function(_, _, yrange)
-        bar:SetShown((yrange or 0) > 0.5)
-    end)
     sf:SetScript("OnSizeChanged", function(self, w)
         child:SetWidth(w)
         if self.onResize then self.onResize(w) end
@@ -566,10 +642,271 @@ function W.Pill(parent)
 end
 
 ---------------------------------------------------------------------------
--- Context menu (Blizzard_Menu)
+-- Menus. The generator fills a description with the part of the Blizzard_Menu
+-- builder API the addon uses: CreateTitle, CreateDivider, CreateButton,
+-- CreateRadio and SetEnabled. A button that gets children is a submenu.
+-- Frames are built on first use; GLOBAL_MOUSE_DOWN is registered only while
+-- a menu is open, to close it on a click outside.
 ---------------------------------------------------------------------------
+local Desc = {}
+Desc.__index = Desc
+
+local function newDesc(kind, text)
+    return setmetatable({ kind = kind, text = text, enabled = true }, Desc)
+end
+
+local function addChild(parent, d)
+    local list = parent.children
+    if not list then
+        list = {}
+        parent.children = list
+    end
+    list[#list + 1] = d
+    return d
+end
+
+function Desc:CreateTitle(text) return addChild(self, newDesc("title", text)) end
+function Desc:CreateDivider() return addChild(self, newDesc("divider")) end
+function Desc:CreateButton(text, fn)
+    local d = addChild(self, newDesc("button", text))
+    d.fn = fn
+    return d
+end
+function Desc:CreateRadio(text, isSelected, setSelected)
+    local d = addChild(self, newDesc("radio", text))
+    d.isSelected = isSelected
+    d.fn = setSelected
+    return d
+end
+function Desc:SetEnabled(on) self.enabled = on and true or false end
+
+local MENU_PAD, ROW_H, TITLE_H, DIV_H = 4, 24, 22, 9
+local menu, menuOwner, menuToggle
+local levels = {}
+local openLevel
+
+-- Uppercase for titles, keeping |c and |r escapes intact.
+local function upper(s)
+    return (strupper(s or ""):gsub("|C(%x%x%x%x%x%x%x%x)", "|c%1"):gsub("|R", "|r"))
+end
+
+function W.CloseMenu()
+    if menu and menu:IsShown() then menu:Hide() end
+end
+
+local function hideLevelsFrom(depth)
+    for i = depth, #levels do
+        local f = levels[i]
+        if f:IsShown() then
+            f:Hide()
+            if f.anchor then f.anchor.bg:Hide() end
+        end
+    end
+end
+
+local function rowEnter(row)
+    local d = row.desc
+    hideLevelsFrom(row.depth + 1)
+    if not d.enabled then return end
+    row.bg:Show()
+    if d.children then openLevel(row.depth + 1, d, row) end
+end
+
+local function rowLeave(row)
+    -- keep the path to an open submenu highlighted
+    local sub = levels[row.depth + 1]
+    if sub and sub:IsShown() and sub.anchor == row then return end
+    row.bg:Hide()
+end
+
+local function rowClick(row)
+    local d = row.desc
+    if not d.enabled or d.children then return end
+    W.CloseMenu()
+    if d.fn then d.fn() end
+end
+
+local function levelRow(f, i)
+    local row = f.rows[i]
+    if row then return row end
+    row = CreateFrame("Button", nil, f)
+    row.depth = f.depth
+    row.bg = W.Round(row, "BACKGROUND", "round", T.Color("panel3"))
+    row.bg:SetAllPoints()
+    row.bg:Hide()
+    row.check = W.Icon(row, "check", 11)
+    row.check:SetPoint("LEFT", 10, 0)
+    row.label = W.Text(row, 12.5, "regular", "text")
+    row.chev = W.Icon(row, "chevron", 9, T.Color("muted"))
+    row.chev:SetPoint("RIGHT", -8, 0)
+    row.line = W.Rect(row, "ARTWORK", T.Color("line"))
+    row.line:SetHeight(1)
+    row.line:SetPoint("LEFT", 2, 0)
+    row.line:SetPoint("RIGHT", -2, 0)
+    row:SetScript("OnEnter", rowEnter)
+    row:SetScript("OnLeave", rowLeave)
+    row:SetScript("OnClick", rowClick)
+    f.rows[i] = row
+    return row
+end
+
+local function newLevel(depth)
+    local f = CreateFrame("Frame", nil, menu)
+    f.depth = depth
+    f.rows = {}
+    f:SetFrameLevel(menu:GetFrameLevel() + depth * 20)
+    f:SetClampedToScreen(true)
+    f:EnableMouse(true)
+    local shadow = W.Round(f, "BACKGROUND", "round", 0, 0, 0, 0.45, -8)
+    shadow:SetPoint("TOPLEFT", -4, 2)
+    shadow:SetPoint("BOTTOMRIGHT", 4, -6)
+    W.Skin(f, "panel2", "line2")
+    f:Hide()
+    levels[depth] = f
+    return f
+end
+
+-- Lays out desc.children in level `depth`. Submenus open beside `anchor`.
+function openLevel(depth, desc, anchor, minWidth)
+    local f = levels[depth] or newLevel(depth)
+    local items = desc.children
+    local textX = 10
+    for _, d in ipairs(items) do
+        if d.kind == "radio" then
+            textX = 29
+            break
+        end
+    end
+    local y, w = MENU_PAD, 0
+    for i, d in ipairs(items) do
+        local row = levelRow(f, i)
+        row.desc = d
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", MENU_PAD, -y)
+        row:SetPoint("TOPRIGHT", -MENU_PAD, -y)
+        row:SetAlpha(1)
+        row.bg:Hide()
+        row.check:Hide()
+        row.chev:Hide()
+        row.line:Hide()
+        row.label:ClearAllPoints()
+        local h
+        if d.kind == "divider" then
+            h = DIV_H
+            row.label:SetText("")
+            row.line:Show()
+            row:EnableMouse(false)
+        elseif d.kind == "title" then
+            h = TITLE_H
+            W.SetFont(row.label, 10.5, "bold")
+            row.label:SetTextColor(T.Color("dim"))
+            row.label:SetText(upper(d.text))
+            row.label:SetPoint("BOTTOMLEFT", 10, 4)
+            w = math.max(w, row.label:GetUnboundedStringWidth() + 20)
+            row:EnableMouse(false)
+        else
+            h = ROW_H
+            W.SetFont(row.label, 12.5, "regular")
+            row.label:SetTextColor(T.Color("text"))
+            row.label:SetText(d.text or "")
+            row.label:SetPoint("LEFT", textX, 0)
+            if d.kind == "radio" and d.isSelected and d.isSelected() then
+                row.check:SetVertexColor(T.Accent())
+                row.check:Show()
+            end
+            if d.children then row.chev:Show() end
+            row:SetAlpha(d.enabled and 1 or 0.4)
+            w = math.max(w, textX + row.label:GetUnboundedStringWidth() + (d.children and 28 or 12))
+            row:EnableMouse(true)
+        end
+        row:SetHeight(h)
+        row:Show()
+        y = y + h
+    end
+    for i = #items + 1, #f.rows do f.rows[i]:Hide() end
+    f:SetSize(math.floor(math.max(minWidth or 120, w + MENU_PAD * 2) + 0.5), y + MENU_PAD)
+    f.anchor = anchor
+    if anchor then
+        f:ClearAllPoints()
+        local s = f:GetEffectiveScale()
+        if (anchor:GetRight() + MENU_PAD + 2 + f:GetWidth()) * s > UIParent:GetRight() * UIParent:GetEffectiveScale() then
+            f:SetPoint("TOPRIGHT", anchor, "TOPLEFT", -MENU_PAD - 2, MENU_PAD)
+        else
+            f:SetPoint("TOPLEFT", anchor, "TOPRIGHT", MENU_PAD + 2, MENU_PAD)
+        end
+    end
+    f:Show()
+    return f
+end
+
+local function onGlobalMouseDown()
+    for i = 1, #levels do
+        if levels[i]:IsShown() and levels[i]:IsMouseOver() then return end
+    end
+    -- a dropdown's own button toggles it on click
+    if menuToggle and menuOwner and menuOwner:IsMouseOver() then return end
+    W.CloseMenu()
+end
+
+local function buildMenu()
+    menu = CreateFrame("Frame", nil, UIParent)
+    menu:SetAllPoints(UIParent)
+    menu:SetFrameStrata("FULLSCREEN_DIALOG")
+    menu:Hide()
+    menu:SetScript("OnKeyDown", function(self, key)
+        if key == "ESCAPE" and not InCombatLockdown() then
+            self:SetPropagateKeyboardInput(false)
+            W.CloseMenu()
+        end
+    end)
+    menu:SetScript("OnHide", function()
+        hideLevelsFrom(1)
+        menuOwner, menuToggle = nil, nil
+        ns.UnregisterEvent(W, "GLOBAL_MOUSE_DOWN")
+    end)
+end
+
+local function openMenu(owner, generator, dropdown)
+    if menu and menu:IsShown() then
+        local same = menuOwner == owner
+        W.CloseMenu()
+        if same and dropdown then return end
+    end
+    local root = newDesc("root")
+    generator(owner, root)
+    W.menuRoot = root
+    if not root.children then return end
+    if not menu then buildMenu() end
+    menu:SetScale(owner:GetEffectiveScale() / UIParent:GetEffectiveScale())
+    -- Escape closes the menu; keyboard propagation cannot be changed in combat
+    if InCombatLockdown() then
+        menu:EnableKeyboard(false)
+    else
+        menu:EnableKeyboard(true)
+        menu:SetPropagateKeyboardInput(true)
+    end
+    menuOwner, menuToggle = owner, dropdown
+    menu:Show()
+    local f = openLevel(1, root, nil, dropdown and math.max(160, owner:GetWidth()) or 180)
+    f:ClearAllPoints()
+    if dropdown then
+        f:SetPoint("TOPLEFT", owner, "BOTTOMLEFT", 0, -4)
+    else
+        local x, y = GetCursorPosition()
+        local s = f:GetEffectiveScale()
+        f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x / s + 2, y / s - 2)
+    end
+    ns.RegisterEvent(W, "GLOBAL_MOUSE_DOWN", onGlobalMouseDown)
+end
+
+-- Context menu at the cursor.
 function W.Menu(owner, generator)
-    MenuUtil.CreateContextMenu(owner, generator)
+    openMenu(owner, generator, false)
+end
+
+-- Dropdown below its button; clicking the button again closes it.
+function W.Dropdown(owner, generator)
+    openMenu(owner, generator, true)
 end
 
 -- "2d ago" style

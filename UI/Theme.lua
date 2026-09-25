@@ -55,6 +55,14 @@ do
             semibold = MEDIA .. "Fonts\\Inter-SemiBold.ttf",
             bold = MEDIA .. "Fonts\\Inter-Bold.ttf",
         }
+        -- Touch the font files at load time so the client has them ready before the
+        -- window is built. On a cold start an unloaded font measures as 0 wide, and
+        -- everything sized by GetUnboundedStringWidth comes out too narrow.
+        for _, path in pairs(T.FONT) do
+            local fs = UIParent:CreateFontString(nil, "BACKGROUND")
+            fs:SetFont(path, 12, "")
+            fs:SetText("Aa")
+        end
     end
 end
 

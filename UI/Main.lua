@@ -699,12 +699,34 @@ local function build()
     grip:SetSize(16, 16)
     grip:SetPoint("BOTTOMRIGHT", -3, 3)
     grip:SetFrameLevel(frame:GetFrameLevel() + 50)
-    grip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
-    grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
-    grip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
-    grip:SetScript("OnMouseDown", function() frame:StartSizing("BOTTOMRIGHT") end)
+    grip.icon = W.Icon(grip, "grip", 16)
+    grip.icon:SetAllPoints()
+    local function paintGrip()
+        if grip.sizing then
+            grip.icon:SetVertexColor(T.Accent())
+        else
+            grip.icon:SetVertexColor(T.Color(grip:IsMouseOver() and "muted" or "dim"))
+        end
+    end
+    T.OnAccent(paintGrip)
+    grip:SetScript("OnEnter", function()
+        SetCursor("UI_RESIZE_CURSOR")
+        paintGrip()
+    end)
+    grip:SetScript("OnLeave", function()
+        if not grip.sizing then SetCursor(nil) end
+        paintGrip()
+    end)
+    grip:SetScript("OnMouseDown", function()
+        grip.sizing = true
+        paintGrip()
+        frame:StartSizing("BOTTOMRIGHT")
+    end)
     grip:SetScript("OnMouseUp", function()
         frame:StopMovingOrSizing()
+        grip.sizing = nil
+        if not grip:IsMouseOver() then SetCursor(nil) end
+        paintGrip()
         ns.settings.window.w, ns.settings.window.h = frame:GetSize()
         savePosition()
     end)
@@ -733,6 +755,7 @@ local function build()
         ns.UnregisterEvent(UI, "PLAYER_DIFFICULTY_CHANGED")
         ns.Inspect:SetActive(false)
         UI.CloseModal()
+        W.CloseMenu()
         local page = UI.current and UI.pages[UI.current]
         if page and page.OnHide then page:OnHide() end
     end)

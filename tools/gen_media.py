@@ -32,7 +32,7 @@ ICONS = {
     "nav_options": '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 4h7M12 4h2M2 12h2M7 12h7"/><circle cx="10.5" cy="4" r="1.6"/><circle cx="5.5" cy="12" r="1.6"/></svg>',
     "plus": '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>',
     "search": '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>',
-    "wand": '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 14 10 6M9 3v2M12 6h2M11.5 3.5l1-1M7 2l.5 1"/><path d="m10 6 1.2-1.2"/></svg>',
+    "wand": '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2.5 13.5 8 8"/><path d="M11 1.2 12 4l2.8 1-2.8 1-1 2.8-1-2.8-2.8-1 2.8-1z" fill="currentColor" stroke="currentColor" stroke-width=".8" stroke-linejoin="round"/></svg>',
     "undo": '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 3.5 2.5 6.5l3 3"/><path d="M2.5 6.5H10a3.5 3.5 0 0 1 0 7H7"/></svg>',
     "save": '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M2.5 2.5h8.5l2.5 2.5v8.5h-11z"/><path d="M5 2.5v3.5h5V2.5M5 13.5V9.5h6v4"/></svg>',
     "play": '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M4.5 2.8v10.4L13 8z"/></svg>',
@@ -114,9 +114,24 @@ def shapes():
     return res
 
 
+def drawn_icons():
+    """Icons drawn with Pillow instead of SVG."""
+    res = {}
+    # resize grip: a triangle of six dots hugging the bottom-right corner
+    def grip(d, s, k):
+        u = s / 16.0  # 16 unit grid like the SVG icons
+        r = 1.1 * u
+        for cx, cy in ((13, 13), (9, 13), (5, 13), (13, 9), (9, 9), (13, 5)):
+            d.ellipse([cx * u - r, cy * u - r, cx * u + r, cy * u + r], fill=255)
+    res["grip"] = supersampled(ICON_SIZE, grip)
+    return res
+
+
 def main():
     os.makedirs(os.path.join(OUT, "Icons"), exist_ok=True)
     for name, img in render_icons().items():
+        write_tga(img, os.path.join(OUT, "Icons", name + ".tga"))
+    for name, img in drawn_icons().items():
         write_tga(img, os.path.join(OUT, "Icons", name + ".tga"))
     for name, img in shapes().items():
         write_tga(img, os.path.join(OUT, name + ".tga"))

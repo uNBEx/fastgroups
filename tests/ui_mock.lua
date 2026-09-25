@@ -120,38 +120,8 @@ function SetRaidSubgroup(i, g) stub.lastSet = { i, g } end
 function SwapRaidSubgroup(a, b) stub.lastSwap = { a, b } end
 C_GuildInfo = { GuildRoster = noop }
 Enum.UITextureSliceMode = { Stretched = 0, Tiled = 1 }
-ScrollUtil = { InitScrollFrameWithScrollBar = noop }
-
--- Menus: run the generator against a recording description; M.menuCalls
--- collects every callback so a test can invoke them.
-M.menuCalls = {}
-local Desc = {}
-Desc.__index = Desc
-local function newDesc() return setmetatable({ children = {} }, Desc) end
-function Desc:CreateTitle(text) table.insert(self.children, { "title", text }) end
-function Desc:CreateDivider() end
-function Desc:CreateButton(text, fn)
-    local d = newDesc()
-    d.text = text
-    table.insert(self.children, d)
-    if fn then table.insert(M.menuCalls, fn) end
-    return d
-end
-function Desc:CreateRadio(text, isSel, setSel)
-    local d = newDesc()
-    d.text = text
-    isSel()
-    table.insert(M.menuCalls, setSel)
-    table.insert(self.children, d)
-    return d
-end
-function Desc:SetEnabled() end
-MenuUtil = {
-    CreateContextMenu = function(owner, gen)
-        M.lastMenu = newDesc()
-        gen(owner, M.lastMenu)
-    end,
-}
+function GetCursorPosition() return 400, 300 end
+function SetCursor() end
 
 -- Libraries (minimap)
 local fakeLDB = { NewDataObject = function(_, _, obj) return obj end }
