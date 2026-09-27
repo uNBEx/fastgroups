@@ -105,7 +105,6 @@ What changed in each version: [CHANGELOG.md](CHANGELOG.md).
   `.github/workflows/release.yml`, which checks the build and publishes it to CurseForge, Wago
   and GitHub Releases with that version's section of [CHANGELOG.md](CHANGELOG.md) as the notes.
   `tools/package.sh` builds the same zip locally without uploading.
-- Later ideas live in [IDEAS.md](IDEAS.md). Notes for AI agents live in [CLAUDE.md](CLAUDE.md).
 
 ## Credits
 

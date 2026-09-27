@@ -1,5 +1,7 @@
 resources/
+CLAUDE.md
 CLAUDE.local.md
+IDEAS.md
 .luarocks/
 *.swp
 .DS_Store

@@ -18,7 +18,4 @@ ignore:
   - resources
   - CHANGELOG.md
   - RELEASE_NOTES.md
-  - CLAUDE.md
-  - CLAUDE.local.md
-  - IDEAS.md
   - .luacheckrc
