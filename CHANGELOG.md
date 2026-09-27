@@ -4,7 +4,7 @@ All notable changes to FastGroups. Newest first. Versions follow
 [Semantic Versioning](https://semver.org); the format follows
 [Keep a Changelog](https://keepachangelog.com).
 
-## v0.2.0 - Unreleased
+## v0.2.0 - 2026-09-27
 
 First public release.
 
