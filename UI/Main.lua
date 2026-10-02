@@ -42,12 +42,13 @@ local function releaseToast(t)
     layoutToasts()
 end
 
+local TOAST_W = 320
 local TOAST_COLOR = { info = nil, ok = "ok", warn = "warn", error = "danger" }
 
 local function newToast()
     local t = CreateFrame("Frame", nil, frame)
     t:SetFrameStrata("DIALOG")
-    t:SetWidth(320)
+    t:SetWidth(TOAST_W)
     W.Skin(t, "panel2", "line2")
     t.stripe = W.Rect(t, "ARTWORK")
     t.stripe:SetPoint("TOPLEFT", 1, -5)
@@ -56,7 +57,9 @@ local function newToast()
     t.text = W.Text(t, 12, "regular", "text")
     t.text:SetWordWrap(true)
     t.text:SetPoint("TOPLEFT", 14, -10)
-    t.text:SetPoint("RIGHT", -12, 0)
+    -- a fixed width, not a RIGHT anchor: a new toast has no points yet when
+    -- setupToast measures it, and an anchored string would measure as one line
+    t.text:SetWidth(TOAST_W - 26)
     t.barBg = W.Round(t, "ARTWORK", "round3", T.Color("panel3"))
     t.barBg:SetHeight(3)
     t.barBg:SetPoint("BOTTOMLEFT", 14, 9)
