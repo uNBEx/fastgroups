@@ -656,6 +656,9 @@ local function startSizing()
     probe:SetPoint("TOPLEFT", frame, "TOPLEFT")
     probe:SetSize(frame:GetSize())
     probe:Show()
+    -- Resolve the new anchor now; a probe created this frame has no rect yet, and a reused
+    -- one still has the rect left over from the previous resize.
+    probe:GetLeft()
     probe:StartSizing("BOTTOMRIGHT")
 end
 
