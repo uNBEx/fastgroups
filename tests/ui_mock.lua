@@ -73,7 +73,18 @@ function Obj:SetText(t) self._text = t == nil and "" or tostring(t) end
 function Obj:GetText() return self._text end
 function Obj:GetStringWidth() return M.fontsLoaded and #(self._text or "") * 6 or 0 end
 Obj.GetUnboundedStringWidth = Obj.GetStringWidth
-function Obj:GetStringHeight() return 14 end
+function Obj:SetWordWrap(v) self._wrap = v end
+-- In game a width from anchors is only resolved in the next layout pass, so a wrapped
+-- string measured right after it was built or moved counts as one line (see W.Text).
+function Obj:GetStringHeight()
+    if self._wrap then
+        if not (self._w > 0) then error("wrapped string measured without SetWidth", 2) end
+        if self._hpoints and self._hpoints.LEFT and self._hpoints.RIGHT then
+            error("wrapped string measured with a LEFT + RIGHT anchor pair", 2)
+        end
+    end
+    return 14
+end
 function Obj:CreateTexture() return new("Texture", self) end
 function Obj:CreateFontString() return new("FontString", self) end
 function Obj:GetParent() return self._parent end
@@ -109,8 +120,18 @@ function Obj:HasFocus() return false end
 function Obj:GetVerticalScroll() return 0 end
 function Obj:GetVerticalScrollRange() return 0 end
 function Obj:GetPoint() return "CENTER", nil, "CENTER", 0, 0 end
-function Obj:SetPoint() self._points = self._points + 1 end
-function Obj:ClearAllPoints() self._points = 0 end
+function Obj:SetPoint(point)
+    self._points = self._points + 1
+    if self._kind == "FontString" and type(point) == "string" then
+        self._hpoints = self._hpoints or {}
+        if point:find("LEFT") then self._hpoints.LEFT = true end
+        if point:find("RIGHT") then self._hpoints.RIGHT = true end
+    end
+end
+function Obj:ClearAllPoints()
+    self._points = 0
+    self._hpoints = nil
+end
 function Obj:GetNumPoints() return self._points end
 function Obj:SetValue(v) self._value = v end
 function Obj:GetValue() return self._value end

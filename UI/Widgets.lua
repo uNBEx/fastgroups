@@ -98,6 +98,10 @@ function W.Skin(frame, bg, border, bgAlpha, borderAlpha)
     return frame
 end
 
+-- A word-wrapped string whose height is measured (GetStringHeight) needs an explicit
+-- SetWidth, not a LEFT + RIGHT anchor pair: a width from anchors is only resolved in the
+-- next layout pass, so on a frame built or moved this frame it measures as one line and
+-- the text ends up cut off. tests/ui_mock.lua enforces this.
 function W.Text(parent, size, weight, color, layer)
     local fs = parent:CreateFontString(nil, layer or "OVERLAY")
     fs:SetFont(T.FONT[weight or "regular"], size or 12, "")

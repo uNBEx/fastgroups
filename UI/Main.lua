@@ -154,7 +154,6 @@ local function buildModal()
     modal.text = W.Text(box, 12, "regular", "muted")
     modal.text:SetWordWrap(true)
     modal.text:SetPoint("TOPLEFT", modal.title, "BOTTOMLEFT", 0, -8)
-    modal.text:SetPoint("RIGHT", -18, 0)
     modal.input = W.Edit(box, { width = 384, height = 30 })
     modal.buttons = {}
     modal:SetScript("OnMouseDown", function() end)
@@ -170,6 +169,8 @@ function UI.Modal(opts)
     local box = modal.box
     box:SetWidth(opts.width or 420)
     modal.title:SetText(opts.title or "")
+    -- measured below, so a fixed width (see W.Text)
+    modal.text:SetWidth((opts.width or 420) - 36)
     modal.text:SetText(opts.text or "")
     local y = 18 + modal.title:GetStringHeight() + 8
     if opts.text and opts.text ~= "" then
