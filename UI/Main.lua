@@ -864,6 +864,7 @@ end
 
 local REASONS = {
     combat = "Stopped: combat started. Press Apply again after combat.",
+    encounter = "Stopped: a boss encounter started. Press Apply again after the pull.",
     stuck = "Stopped: no legal move left. Check that no group has more than 5 players.",
     busy = "Stopped: the remaining players are in combat.",
     stopped = "Apply stopped.",

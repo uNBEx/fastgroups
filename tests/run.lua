@@ -330,6 +330,84 @@ test("offline members, remove rules and uninvite by roster name", function()
     Board:SetSource("none")
 end)
 
+test("apply skips fighting players in instances and never waits on a refused move", function()
+    local roster = { { "Alpha", 1 }, { "Bravo", 1 }, { "Charlie", 2 }, { "Delta", 3 } }
+    local saved = GetRaidRosterInfo
+    GetRaidRosterInfo = function(i)
+        local r = roster[i]
+        if r then return r[1], 0, r[2], 80, "MAGE", "MAGE", "", true, false, "", false, "DAMAGER" end
+    end
+    local function move(i, g) roster[i][2] = g end
+    stub.inRaid = true
+    Board:SetSource("live")
+    Board:Move("Alpha-Silvermoon", 2)
+    local Apply = ns.Apply
+    local state
+    ns.On("APPLY_STATE", "test", function(_, ok, reason) state = { ok, reason } end)
+
+    stub.encounter = true
+    local ok, why = Apply:Start()
+    eq(ok, false)
+    assert(why:find("boss encounter"), why)
+    stub.encounter = nil
+    stub.combat.player = true
+    ok, why = Apply:Start()
+    eq(ok, false)
+    assert(why:find("You are in combat"), why)
+    stub.instance = true
+    stub.combat = { raid1 = true }
+    ok, why = Apply:Start()
+    eq(ok, false)
+    assert(why:find("Alpha"), why)
+    eq(#stub.moves, 0, "nothing moved while refused")
+    eq(Apply.running, false)
+
+    -- players who stay put may fight
+    stub.combat = { raid3 = true }
+    ok = Apply:Start()
+    eq(ok, true)
+    eq(#stub.moves, 1)
+    eq(stub.moves[1][1], "set")
+    -- out of combat on our side, but the server refuses: no roster update
+    stub.fire("UI_ERROR_MESSAGE", 0, "Some other error")
+    eq(Apply.running, true, "other errors are ignored")
+    stub.fire("UI_ERROR_MESSAGE", 0, ERR_GROUP_SWAP_FAILED)
+    eq(Apply.running, false, "replanned instead of waiting")
+    eq(state[2], "busy")
+    eq(#stub.moves, 1, "the refused move is not retried")
+
+    -- open world: fighting players are moved
+    stub.instance = nil
+    stub.combat = { raid1 = true }
+    Board:Move("Delta-Silvermoon", 2)
+    ok = Apply:Start()
+    eq(ok, true)
+    eq(#stub.moves, 2)
+    move(stub.moves[2][2], stub.moves[2][3])
+    stub.fire("GROUP_ROSTER_UPDATE")
+    eq(#stub.moves, 3, "next move after the server confirmed")
+    stub.fire("ENCOUNTER_START", 1, "Boss", 16, 20)
+    eq(Apply.running, false)
+    eq(state[2], "encounter")
+    Board:Move("Bravo-Silvermoon", 3)
+    ok = Apply:Start()
+    eq(ok, true)
+    eq(#stub.moves, 4)
+    stub.combat.player = true
+    stub.fire("PLAYER_REGEN_DISABLED")
+    eq(Apply.running, false)
+    eq(state[2], "combat")
+    stub.fire("UI_ERROR_MESSAGE", 0, ERR_GROUP_SWAP_FAILED)
+    stub.fire("GROUP_ROSTER_UPDATE")
+    eq(#stub.moves, 4, "events unregistered after stop")
+
+    ns.On("APPLY_STATE", "test", nil)
+    stub.moves, stub.combat = {}, {}
+    GetRaidRosterInfo = saved
+    stub.inRaid = false
+    Board:SetSource("none")
+end)
+
 ---------------------------------------------------------------------------
 test("inspect queue paces, retries and rechecks ambiguous specs", function()
     local Inspect = ns.Inspect

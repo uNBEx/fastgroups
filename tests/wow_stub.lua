@@ -67,7 +67,14 @@ function CanInspect() return true end
 function UnitIsConnected() return true end
 function UnitIsVisible(u) return not (stub.farAway and stub.farAway[u]) end
 function UnitGUID(u) return "GUID-" .. tostring(u) end
-function InCombatLockdown() return false end
+stub.combat = {}        -- units in combat; "player" also drives InCombatLockdown
+function InCombatLockdown() return stub.combat.player and true or false end
+function IsEncounterInProgress() return stub.encounter and true or false end
+function IsInInstance() return stub.instance and true or false, stub.instance and "raid" or "none" end
+ERR_GROUP_SWAP_FAILED = "Players in raid combat cannot change raid subgroups"
+stub.moves = {}         -- { "set", index, group } / { "swap", a, b }
+function SetRaidSubgroup(i, g) table.insert(stub.moves, { "set", i, g }) end
+function SwapRaidSubgroup(a, b) table.insert(stub.moves, { "swap", a, b }) end
 function UnitIsGroupLeader() return true end
 function UnitIsGroupAssistant() return false end
 function IsEveryoneAssistant() return false end
@@ -79,7 +86,7 @@ C_PartyInfo = {
     PromoteToAssistant = function(name) stub.promoted = { name, 1 } end,
     DemoteAssistant = function(name) stub.promoted = { name, 0 } end,
 }
-function UnitAffectingCombat() return false end
+function UnitAffectingCombat(u) return stub.combat[u] and true or false end
 function UnitIsUnit(a, b) return a == b end
 function UnitGroupRolesAssigned() return "NONE" end
 function GetInstanceInfo() return "Test", "none", 0 end

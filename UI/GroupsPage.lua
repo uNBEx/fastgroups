@@ -1298,15 +1298,21 @@ function Page:OnApply()
         apply:Start()
         return
     end
+    -- checked on press, so the button never stays locked after combat
+    local blocked = apply:Blocked()
+    if blocked then
+        UI.Toast(blocked, "warn", 6)
+        return
+    end
     local n = Board:Pending()
     local function go()
         local ok, reason = apply:Start()
-        if not ok and reason then UI.Toast(reason, "warn") end
+        if not ok and reason then UI.Toast(reason, "warn", 6) end
     end
     if ns.settings.confirmApply and Board.source == "live" then
         UI.Modal({
             title = "Apply " .. n .. " move" .. (n == 1 and "" or "s") .. "?",
-            text = "FastGroups moves one player at a time and waits for the server to confirm each move. It stops by itself if combat starts.",
+            text = "FastGroups moves one player at a time and waits for the server to confirm each move.",
             buttons = {
                 { text = "Cancel", kind = "ghost" },
                 { text = "Apply", kind = "primary", onClick = go },

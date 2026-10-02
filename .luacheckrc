@@ -20,13 +20,13 @@ globals = {
 
 -- WoW API used by the addon (verified against Gethe/wow-ui-source, live 12.1)
 read_globals = {
-    "ACCEPT", "DECLINE", "DEFAULT_CHAT_FRAME", "LOCALIZED_CLASS_NAMES_MALE", "MAX_RAID_MEMBERS",
+    "ACCEPT", "DECLINE", "DEFAULT_CHAT_FRAME", "ERR_GROUP_SWAP_FAILED", "LOCALIZED_CLASS_NAMES_MALE", "MAX_RAID_MEMBERS",
     "RAID_CLASS_COLORS", "STANDARD_TEXT_FONT", "Enum",
     "C_AddOns", "C_ChatInfo", "C_EncodingUtil", "C_GuildInfo", "C_PartyInfo", "C_SpecializationInfo", "C_Timer",
     "CanInspect", "ClearInspectPlayer", "ColorPickerFrame", "CreateColor", "CreateFrame",
     "GameTooltip", "GetClassAtlas", "GetDifficultyInfo", "GetGuildRosterInfo", "GetCursorPosition", "GetInstanceInfo",
     "GetLocale", "GetNormalizedRealmName", "GetNumGuildMembers", "GetRaidDifficultyID", "GetRaidRosterInfo",
-    "GetRealmName", "GetSpecializationInfoByID", "HasLFGRestrictions", "InCombatLockdown", "InspectFrame", "IsEveryoneAssistant", "IsInGroup", "IsInGuild", "IsInRaid",
+    "GetRealmName", "GetSpecializationInfoByID", "HasLFGRestrictions", "InCombatLockdown", "InspectFrame", "IsEncounterInProgress", "IsInInstance", "IsEveryoneAssistant", "IsInGroup", "IsInGuild", "IsInRaid",
     "LibStub", "NotifyInspect", "SetCursor", "SetRaidSubgroup", "StaticPopup_Show",
     "SwapRaidSubgroup", "UIParent", "UnitAffectingCombat", "UnitGUID", "UnitGroupRolesAssigned",
     "UnitIsConnected", "UnitIsGroupAssistant", "UnitIsGroupLeader", "UnitIsUnit", "UnitIsVisible", "UnitName",

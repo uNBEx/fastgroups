@@ -1,13 +1,20 @@
 -- Push the draft to the real raid. One SetRaidSubgroup / SwapRaidSubgroup at
 -- a time; the next move is chosen when GROUP_ROSTER_UPDATE confirms the last.
--- Events are only registered while an apply is running.
+-- Events are only registered while an apply is running. Combat is checked
+-- when Apply is pressed, never cached in the UI, so a missed combat end
+-- cannot lock the button.
+--
+-- The server refuses to move a player who is in combat inside an instance
+-- (ERR_GROUP_SWAP_FAILED); in the open world it does not care. The client
+-- blocks the calls for addons while we are in combat (ADDON_ACTION_BLOCKED),
+-- although Blizzard's raid panel may still move players then.
 local _, ns = ...
 
 local Apply = {
     running = false,
     total = 0,
     done = 0,
-    expect = nil,       -- { key, group } the last move should produce
+    expect = nil,       -- { key, group, keyB } the last move should produce
     waiting = false,
 }
 ns.Apply = Apply
@@ -79,9 +86,11 @@ end
 -- Driver
 ---------------------------------------------------------------------------
 local memberPool, memberList = {}, {}
+local refused = {}      -- key -> true: the server refused this run's move
 
 local function snapshot()
     wipe(memberList)
+    local instanced = IsInInstance()
     local i = 0
     for key, m in pairs(ns.Raid.members) do
         i = i + 1
@@ -91,7 +100,7 @@ local function snapshot()
             memberPool[i] = t
         end
         t.key, t.index, t.group = key, m.index, m.group
-        t.busy = UnitAffectingCombat(m.unit) and true or false
+        t.busy = (refused[key] or (instanced and UnitAffectingCombat(m.unit))) and true or false
         memberList[i] = t
     end
     return memberList
@@ -103,6 +112,8 @@ local function finish(ok, reason)
     Apply.waiting = false
     ns.UnregisterEvent(Apply, "GROUP_ROSTER_UPDATE")
     ns.UnregisterEvent(Apply, "PLAYER_REGEN_DISABLED")
+    ns.UnregisterEvent(Apply, "ENCOUNTER_START")
+    ns.UnregisterEvent(Apply, "UI_ERROR_MESSAGE")
     ns.Board:Sync()
     ns.Fire("APPLY_STATE", ok, reason)
 end
@@ -111,21 +122,52 @@ function Apply:Stop(reason)
     if self.running then finish(false, reason or "stopped") end
 end
 
--- Can the current board be applied? Returns ok, reason.
+-- Can the current board be applied at all? Returns ok, reason. Only checks
+-- what the roster events keep current; combat is left to Blocked().
 function Apply:CanApply()
     local board = ns.Board
     if board.source == "demo" then return true end
     if board.source ~= "live" then return false, "Only the live raid can be applied." end
     if not IsInRaid() then return false, "You are not in a raid." end
     if not ns.Raid:CanManage() then return false, "Only the raid leader or an assistant can move players." end
-    if InCombatLockdown() then return false, "Groups cannot be changed in combat." end
     return true
+end
+
+local MAX_NAMES = 3
+
+-- Does combat stop an apply right now? Returns a reason or nil. Asked on
+-- every press.
+function Apply:Blocked()
+    if ns.Board.source ~= "live" then return nil end
+    if IsEncounterInProgress() then return "Groups cannot be changed during a boss encounter." end
+    if InCombatLockdown() then return "You are in combat. Press Apply again when combat ends." end
+    if not IsInInstance() then return nil end
+    ns.Raid:Refresh()
+    local draft = ns.Board.draft
+    local names, n = nil, 0
+    for key, m in pairs(ns.Raid.members) do
+        local t = draft[key]
+        if t and t > 0 and t ~= m.group and UnitAffectingCombat(m.unit) then
+            n = n + 1
+            names = names or {}
+            if n <= MAX_NAMES then names[n] = ns.Players.ShortName(key) end
+        end
+    end
+    if n == 0 then return nil end
+    table.sort(names)
+    local list = table.concat(names, ", ")
+    if n > MAX_NAMES then list = list .. " and " .. (n - MAX_NAMES) .. " more" end
+    return "In combat: " .. list .. ". Press Apply again when they are out of combat."
 end
 
 function Apply:Step(force)
     if not self.running then return end
     if not ns.Raid:CanManage() then
         finish(false, "You are no longer the raid leader or an assistant.")
+        return
+    end
+    if InCombatLockdown() then
+        finish(false, "combat")
         return
     end
     ns.Raid:Refresh()
@@ -153,7 +195,7 @@ function Apply:Step(force)
         self.expect = { key = op.a.key, group = op.group }
     else
         SwapRaidSubgroup(op.a.index, op.b.index)
-        self.expect = { key = op.a.key, group = op.b.group }
+        self.expect = { key = op.a.key, group = op.b.group, keyB = op.b.key }
     end
     self.lastKey = op.a.key
     self.lastGroup = self.expect.group
@@ -163,6 +205,22 @@ end
 
 local function onRoster() Apply:Step() end
 local function onCombat() Apply:Stop("combat") end
+local function onEncounter() Apply:Stop("encounter") end
+
+-- A refused move sends no roster update. Skip its players for the rest of
+-- this run (the one in combat, or both of a swap when we cannot tell) and
+-- plan again, so a wrong guess never retries the same move forever.
+local function onError(_, _, _, message)
+    local e = Apply.expect
+    if not e or message ~= ERR_GROUP_SWAP_FAILED then return end
+    local members = ns.Raid.members
+    local a, b = members[e.key], e.keyB and members[e.keyB]
+    local fightA = a and UnitAffectingCombat(a.unit)
+    local fightB = b and UnitAffectingCombat(b.unit)
+    if fightA or not fightB then refused[e.key] = true end
+    if e.keyB and (fightB or not fightA) then refused[e.keyB] = true end
+    Apply:Step(true)
+end
 
 -- Start, or nudge a running apply that waits for a lost server reply.
 function Apply:Start()
@@ -177,10 +235,15 @@ function Apply:Start()
     end
     self.total = ns.Board:Pending()
     if self.total == 0 then return false, "Nothing to apply." end
+    reason = self:Blocked()
+    if reason then return false, reason end
     self.done = 0
     self.running = true
+    wipe(refused)
     ns.RegisterEvent(Apply, "GROUP_ROSTER_UPDATE", onRoster)
     ns.RegisterEvent(Apply, "PLAYER_REGEN_DISABLED", onCombat)
+    ns.RegisterEvent(Apply, "ENCOUNTER_START", onEncounter)
+    ns.RegisterEvent(Apply, "UI_ERROR_MESSAGE", onError)
     ns.Fire("APPLY_STATE", nil)
     self:Step()
     return true
