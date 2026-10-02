@@ -207,6 +207,39 @@ step("auto-split, apply (demo) and revert", function()
     check(Board.draft["Thalric-Silvermoon"] ~= 0, "reverted")
 end)
 
+step("apply confirm with don't ask again", function()
+    local Apply = ns.Apply
+    local start, starts = Apply.Start, 0
+    Apply.Start = function() starts = starts + 1; return true end
+    Board.source = "live"
+    Board:Move("Thalric-Silvermoon", 0)
+    groups:OnApply()
+    check(starts == 0, "dialog shown first")
+    modalButton("Cancel").scripts.OnClick(modalButton("Cancel"))
+    check(starts == 0 and ns.settings.confirmApply, "cancel keeps the setting")
+    groups:OnApply()
+    local skip = groups.skipConfirm.check
+    check(skip:IsVisible() and not groups.skipConfirm.on, "check shown, off")
+    skip.scripts.OnClick(skip)
+    modalButton("Cancel").scripts.OnClick(modalButton("Cancel"))
+    check(ns.settings.confirmApply, "cancel ignores the check")
+    groups:OnApply()
+    check(not groups.skipConfirm.on, "check resets per dialog")
+    skip.scripts.OnClick(skip)
+    for _, o in ipairs(M.objects) do
+        if o ~= groups.apply and o._kind == "Button" and o.label and o.label._text == "Apply" and o:IsVisible() then
+            o.scripts.OnClick(o)
+            break
+        end
+    end
+    check(starts == 1 and ns.settings.confirmApply == false, "applied and stopped asking")
+    groups:OnApply()
+    check(starts == 2 and not modalButton("Cancel"), "no dialog after opting out")
+    ns.settings.confirmApply = true
+    Apply.Start = start
+    Board:SetSource("demo")
+end)
+
 step("save dialog and load loadout", function()
     groups.save.scripts.OnClick(groups.save, "LeftButton")
     local modalButtons = {}

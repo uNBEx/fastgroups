@@ -1310,12 +1310,31 @@ function Page:OnApply()
         if not ok and reason then UI.Toast(reason, "warn", 6) end
     end
     if ns.settings.confirmApply and Board.source == "live" then
+        local skip = self.skipConfirm
+        if not skip then
+            -- holder keeps the check box in line with the dialog text
+            skip = CreateFrame("Frame", nil, UIParent)
+            skip.check = W.Check(skip, "Don't ask again", function() return skip.on end,
+                function(_, v) skip.on = v end)
+            skip.check:SetPoint("TOPLEFT", -7, 0)
+            skip.check:SetPoint("RIGHT")
+            self.skipConfirm = skip
+        end
+        skip.on = false
+        skip.check:Refresh()
         UI.Modal({
             title = "Apply " .. n .. " move" .. (n == 1 and "" or "s") .. "?",
             text = "FastGroups moves one player at a time and waits for the server to confirm each move.",
+            content = skip, contentHeight = 26,
             buttons = {
                 { text = "Cancel", kind = "ghost" },
-                { text = "Apply", kind = "primary", onClick = go },
+                { text = "Apply", kind = "primary", onClick = function()
+                    if skip.on then
+                        ns.settings.confirmApply = false
+                        ns.Fire("SETTINGS_CHANGED", "confirmApply")
+                    end
+                    go()
+                end },
             },
         })
     else
