@@ -4,6 +4,7 @@
     id, name, updated,
     conv = "oddeven" | "split" | "none", -- convention the groups were saved with; none = simple mode
     k = 2..6,                     -- groups used when saved; odd = the last one is shared
+    mode = "auto" | 4 | 6,        -- "Groups used" setting when saved; absent in older loadouts
     groups = { [key] = group },   -- everyone in the setup, absent players included
     memory = { [key] = "L"|"R" }, -- last known side of everyone who ever was in it; for
                                   -- players in the shared group this is their own side
@@ -98,12 +99,12 @@ function Loadouts.SaveCurrent(name, overwriteId)
 
     if lo then
         lo.name = cleanName(name or lo.name)
-        lo.conv, lo.k, lo.groups, lo.memory, lo.info = s.conv, k, groups, memory, info
+        lo.conv, lo.k, lo.mode, lo.groups, lo.memory, lo.info = s.conv, k, s.groupsMode, groups, memory, info
         touch(lo)
     else
         lo = {
             id = ns.NewId(), name = Loadouts.UniqueName(name),
-            conv = s.conv, k = k, groups = groups, memory = memory, info = info,
+            conv = s.conv, k = k, mode = s.groupsMode, groups = groups, memory = memory, info = info,
             updated = time(),
         }
         tinsert(list(), 1, lo)
@@ -164,7 +165,7 @@ end
 -- Export format (compact keys), validated on import.
 ---------------------------------------------------------------------------
 function Loadouts.ToExport(lo)
-    return { n = lo.name, c = lo.conv, k = lo.k, g = lo.groups, m = lo.memory, i = lo.info }
+    return { n = lo.name, c = lo.conv, k = lo.k, gm = lo.mode, g = lo.groups, m = lo.memory, i = lo.info }
 end
 
 local MAX_PLAYERS = 60
@@ -177,6 +178,7 @@ function Loadouts.FromExport(t)
         conv = (t.c == "split" or t.c == "none") and t.c or "oddeven",
         k = (type(t.k) == "number" and t.k >= 2 and t.k <= 6 and t.k == math.floor(t.k)) and t.k
             or (t.k == 8 and 8) or 4,
+        mode = (t.gm == "auto" or t.gm == 4 or t.gm == 6) and t.gm or nil,
         groups = {}, memory = {}, info = {},
     }
     local n = 0

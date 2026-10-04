@@ -13,6 +13,8 @@ All notable changes to FastGroups. Newest first. Versions follow
   Shift-click Auto-split to rebalance everyone from scratch.
 - Auto-split spreads each half's healers over its groups.
 - The balance chip only warns about what Auto-split evens out.
+- Loadouts remember the "Groups used" setting (Auto / 4 / 6) and restore it when loaded. Loadouts
+  saved before this keep the current setting.
 
 ### Added
 - Option "Strict melee/ranged balance" (off by default): Auto-split also moves placed players to

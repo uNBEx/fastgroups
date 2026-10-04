@@ -710,8 +710,10 @@ end
 -- A loadout brings its mode: a simple one turns simple mode on, a split one
 -- turns it off (its own convention). Between split conventions the board
 -- keeps the current one and remaps. Sets self.switched when the mode changed.
+-- It also brings its "Groups used" setting when it was saved with one.
 function Board:AdoptMode(lo)
     local s = settings()
+    if lo.mode then s.groupsMode = lo.mode end
     local conv = lo.conv or "oddeven"
     if (conv == "none") ~= (s.conv == "none") then
         s.conv = conv
