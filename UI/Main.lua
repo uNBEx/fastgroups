@@ -681,6 +681,8 @@ local function onRoster()
     Board:AutoSource()
     ns.Inspect:SetActive(true)
     UI.RefreshStatus()
+    local page = UI.current and UI.pages[UI.current]
+    if page and page.OnRoster then page:OnRoster() end
 end
 
 -- Blizzard's raid panel listens for this besides GROUP_ROSTER_UPDATE, so a
@@ -863,6 +865,7 @@ local function build()
         UI.Progress(text, pct)
         if UI.current == "groups" then UI.RefreshPage() end
     end)
+    ns.On("INVITE_STATE", UI, function(_, kind, n) UI.OnInviteState(kind, n) end)
     ns.On("COMM_STATUS", UI, function(_, kind, a, b) UI.OnCommStatus(kind, a, b) end)
 end
 
@@ -891,6 +894,92 @@ function UI.OnApplyState(ok, reason, demoMoves)
         end
     end
     UI.RefreshPage()
+end
+
+local function players(n) return n .. " player" .. (n == 1 and "" or "s") end
+
+function UI.OnInviteState(kind, n)
+    if kind == "sent" then
+        UI.Toast("Invited " .. players(n) .. ".", "ok")
+    elseif kind == "waiting" then
+        UI.Toast("Invited " .. players(n) .. ". The rest follow when the first one joins.", "ok", 6)
+    elseif kind == "converting" then
+        UI.Toast("Turning the party into a raid; " .. players(n) .. " follow.", "ok")
+    elseif kind == "raid" then
+        UI.Toast("Raid formed: invited " .. players(n) .. " more.", "ok")
+    elseif kind == "lead" then
+        UI.Toast("Invites stopped: you no longer lead the group.", "warn", 6)
+    elseif kind == "left" then
+        UI.Toast("Invites stopped: the party broke up.", "warn", 6)
+    elseif kind == "stopped" then
+        UI.Toast("Invites cancelled.")
+    end
+    if frame and frame:IsShown() then UI.RefreshPage() end
+end
+
+-- Invite buttons: confirm, then invite whoever of `keys` is missing. `from`
+-- names the roster or loadout. Pressed while a run waits for the raid, they
+-- cancel that run.
+local function invite(keys, from)
+    local Invite = ns.Invite
+    if Invite.running then
+        Invite:Stop()
+        return
+    end
+    local ok, reason = Invite:CanInvite()
+    if not ok then
+        UI.Toast(reason, "warn")
+        return
+    end
+    local targets, skipped = Invite:Preview(keys)
+    local lines = {}
+    if skipped.inGroup > 0 then
+        lines[#lines + 1] = skipped.inGroup .. (skipped.inGroup == 1 and " is" or " are") .. " already in your group."
+    end
+    if skipped.offline > 0 then
+        local n = skipped.offline
+        lines[#lines + 1] = n .. " guild member" .. (n == 1 and " is" or "s are") .. " offline and will be skipped."
+    end
+    if skipped.full > 0 then
+        lines[#lines + 1] = players(skipped.full) .. " will not fit in a 40 player raid."
+    end
+    if #targets == 0 then
+        UI.Toast("Nobody to invite from " .. from .. (#lines > 0 and (": " .. table.concat(lines, " ")) or "."), "warn", 6)
+        return
+    end
+    if Invite:NeedsRaid(#targets) then
+        lines[#lines + 1] = IsInGroup() and "Your party is turned into a raid first."
+            or "You are not in a group: 4 invites go out first, the party becomes a raid when one of them joins, then the rest are invited."
+    end
+    UI.Confirm("Invite " .. players(#targets) .. " from \"" .. from .. "\"?", table.concat(lines, "\n"), "Invite", function()
+        local started, why = Invite:Start(keys)
+        if not started then UI.Toast(why, "warn") end
+    end)
+end
+
+function UI.InviteRoster(id)
+    local r = ns.Rosters.Find(id)
+    if r then invite(r.members, r.name) end
+end
+
+-- Everyone placed in a loadout (opened for editing, before the raid forms).
+function UI.InviteLoadout(id)
+    local lo = Loadouts.Find(id)
+    if not lo then return end
+    local keys = {}
+    for key, g in pairs(lo.groups) do
+        if g > 0 then keys[#keys + 1] = key end
+    end
+    table.sort(keys)
+    invite(keys, lo.name)
+end
+
+-- The loaded loadout's players who are not in the raid.
+function UI.InviteAbsent()
+    if not Board.loaded then return end
+    local keys = {}
+    for _, gh in ipairs(Board.ghosts) do keys[#keys + 1] = gh.key end
+    invite(keys, Board.loaded.name)
 end
 
 function UI.OnCommStatus(kind, a, b)

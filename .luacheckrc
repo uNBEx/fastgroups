@@ -25,7 +25,7 @@ read_globals = {
     "C_AddOns", "C_ChatInfo", "C_EncodingUtil", "C_GuildInfo", "C_PartyInfo", "C_SpecializationInfo", "C_Timer",
     "CanInspect", "ClearInspectPlayer", "ColorPickerFrame", "CreateColor", "CreateFrame",
     "GameTooltip", "GetClassAtlas", "GetDifficultyInfo", "GetGuildRosterInfo", "GetCursorPosition", "GetInstanceInfo",
-    "GetLocale", "GetNormalizedRealmName", "GetNumGuildMembers", "GetRaidDifficultyID", "GetRaidRosterInfo",
+    "GetLocale", "GetNormalizedRealmName", "GetNumGuildMembers", "GetNumGroupMembers", "GetRaidDifficultyID", "GetRaidRosterInfo",
     "GetRealmName", "GetSpecializationInfoByID", "HasLFGRestrictions", "InCombatLockdown", "InspectFrame", "IsEncounterInProgress", "IsInInstance", "IsEveryoneAssistant", "IsInGroup", "IsInGuild", "IsInRaid", "IsShiftKeyDown",
     "LibStub", "NotifyInspect", "SetCursor", "SetRaidSubgroup", "StaticPopup_Show",
     "SwapRaidSubgroup", "UIParent", "UnitAffectingCombat", "UnitGUID", "UnitGroupRolesAssigned",

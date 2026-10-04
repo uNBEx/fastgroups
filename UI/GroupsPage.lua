@@ -1001,6 +1001,7 @@ function Page:Build(f)
     banner.close:SetPoint("RIGHT", -8, 0)
     banner.b2 = W.Button(banner, { text = "", height = 28 })
     banner.b1 = W.Button(banner, { text = "", icon = "wand", kind = "primary", height = 28 })
+    banner.b3 = W.Button(banner, { text = "", height = 28 })
     T.OnAccent(function(r, g, b)
         banner.tint:SetVertexColor(r, g, b, 0.09)
         banner.border:SetVertexColor(r, g, b, 0.35)
@@ -1396,11 +1397,12 @@ end
 ---------------------------------------------------------------------------
 -- Layout
 ---------------------------------------------------------------------------
-local function setBanner(b, line1, line2, b1, b2)
+-- Buttons from right to left: b2, b1 (the primary one), b3.
+local function setBanner(b, line1, line2, b1, b2, b3)
     b.line1:SetText(line1)
     b.line2:SetText(line2 or "")
     local x = -40
-    for _, pair in ipairs({ { b.b2, b2 }, { b.b1, b1 } }) do
+    for _, pair in ipairs({ { b.b2, b2 }, { b.b1, b1 }, { b.b3, b3 } }) do
         local btn, spec = pair[1], pair[2]
         if spec then
             btn:SetLabel(spec.text)
@@ -1431,21 +1433,24 @@ function Page:LayoutBanner(width, y)
     local src = Board.source
     if src == "loadout" then
         local lo = Loadouts.Find(Board.sourceId)
+        local id = Board.sourceId
         setBanner(b, "Editing loadout |cffffffff" .. (lo and lo.name or "") .. "|r",
             "Drag players around, then Save and choose Overwrite.",
             { text = "Save", kind = "primary", onClick = function() UI.SaveDialog() end },
-            nil)
+            { text = ns.Invite.running and "Cancel invites" or "Invite", onClick = function() UI.InviteLoadout(id) end })
         return y + 46 + 12
     elseif src == "roster" then
         local r = ns.Rosters.Find(Board.sourceId)
+        local id = Board.sourceId
+        local invite = { text = ns.Invite.running and "Cancel invites" or "Invite roster", onClick = function() UI.InviteRoster(id) end }
         if Board:IsSimple() then
             setBanner(b, "Planning with |cffffffff" .. (r and r.name or "") .. "|r",
-                "Drag players into groups, then Save as a loadout and load it when the raid forms.", nil, nil)
+                "Drag players into groups, then Save as a loadout and load it when the raid forms.", nil, invite)
         else
             setBanner(b, "Planning with |cffffffff" .. (r and r.name or "") .. "|r",
                 "Auto-split or drag players into groups, then Save as a loadout and load it when the raid forms.",
                 { text = "Auto-split", kind = "primary", onClick = function() ns.Split.Run(Board) end },
-                nil)
+                invite)
         end
         return y + 46 + 12
     end
@@ -1462,7 +1467,10 @@ function Page:LayoutBanner(width, y)
                 local placed = Board:AutoFill()
                 UI.Toast("Auto-fill placed " .. placed .. " player" .. (placed == 1 and "" or "s") .. ". Substitutes are marked; review and Apply.", "ok")
             end } or nil,
-            #Board.ghosts > 0 and { text = "Clear absent", onClick = function() Board:ClearGhosts() end } or nil)
+            #Board.ghosts > 0 and { text = "Clear absent", onClick = function() Board:ClearGhosts() end } or nil,
+            -- the demo's absent players are made up; only a real raid invites
+            #Board.ghosts > 0 and Board.source == "live"
+                and { text = ns.Invite.running and "Cancel invites" or "Invite absent", onClick = UI.InviteAbsent } or nil)
         return y + 46 + 12
     end
     b:Hide()

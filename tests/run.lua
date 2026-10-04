@@ -5,7 +5,7 @@ local stub = require("wow_stub")
 local ns = {}
 local CORE = {
     "Core/Init.lua", "Core/Data.lua", "Core/Players.lua", "Core/Raid.lua", "Core/Board.lua",
-    "Core/Split.lua", "Core/Loadouts.lua", "Core/Rosters.lua", "Core/Apply.lua", "Core/Announce.lua", "Core/Demo.lua",
+    "Core/Split.lua", "Core/Loadouts.lua", "Core/Rosters.lua", "Core/Invite.lua", "Core/Apply.lua", "Core/Announce.lua", "Core/Demo.lua",
     "Core/Inspect.lua", "Core/SpecComm.lua", "Core/Serialize.lua", "Core/Comm.lua",
 }
 for _, path in ipairs(CORE) do
@@ -606,6 +606,37 @@ test("live board picks up joiners and leavers on roster events", function()
     stub.inRaid = false
     Board:AutoSource()
     eq(Board.source, "none")
+end)
+
+test("an absent loadout player who joins takes their own slot back", function()
+    local roster = { { "Alpha", 1, "WARRIOR" }, { "Bravo", 1, "PRIEST" }, { "Delta", 2, "ROGUE" } }
+    local saved = GetRaidRosterInfo
+    GetRaidRosterInfo = function(i)
+        local r = roster[i]
+        if r then return r[1], 0, r[2], 80, r[3], r[3], "", true, false, "", false, "DAMAGER" end
+    end
+    stub.inRaid = true
+    Board:SetSource("live")
+    Board.draft["Delta-Silvermoon"] = 3
+    local lo = ns.Loadouts.SaveCurrent("Reclaim")
+    table.remove(roster, 3)
+    Board:AutoSource()
+    ns.Loadouts.Load(lo.id)
+    eq(#Board.ghosts, 1, "Delta absent")
+    eq(Board.loaded.present, 2)
+    roster[3] = { "Delta", 2, "ROGUE" }
+    Board:AutoSource()
+    eq(#Board.ghosts, 0, "ghost gone")
+    eq(Board.draft["Delta-Silvermoon"], 3, "back in the planned group, not waiting")
+    eq(Board.tags["Delta-Silvermoon"], nil, "not tagged new")
+    eq(Board.loaded.present, 3)
+    roster[4] = { "Echo", 1, "MAGE" }
+    Board:AutoSource()
+    eq(Board.draft["Echo-Silvermoon"], 0, "someone else still waits")
+    ns.Loadouts.Delete(lo.id)
+    GetRaidRosterInfo = saved
+    stub.inRaid = false
+    Board:AutoSource()
 end)
 
 test("rank changes redraw and promotions use the roster name", function()
@@ -1291,6 +1322,114 @@ test("auto-fill in simple mode", function()
     ns.Loadouts.Delete(lo.id)
     Board:SetConvention("oddeven")
     Board:SetSource("demo")
+end)
+
+test("invite plan skips members, offline guildies and the raid cap", function()
+    local keys = { "Me-Silvermoon", "In-Silvermoon", "Off-Silvermoon", "Pug-Stormrage", "On-Silvermoon", "Late-Silvermoon" }
+    local inGroup = { ["In-Silvermoon"] = true }
+    local guild = { ["Off-Silvermoon"] = false, ["On-Silvermoon"] = true, ["Late-Silvermoon"] = true }
+    local targets, skipped = ns.Invite.Plan(keys, inGroup, guild, "Me-Silvermoon", 39)
+    eq(table.concat(targets, ","), "On-Silvermoon,Late-Silvermoon,Pug-Stormrage", "online guildies first")
+    eq(skipped.inGroup, 2, "self and members")
+    eq(skipped.offline, 1)
+    eq(skipped.full, 0)
+    targets, skipped = ns.Invite.Plan(keys, inGroup, guild, "Me-Silvermoon", 2)
+    eq(table.concat(targets, ","), "On-Silvermoon,Late-Silvermoon")
+    eq(skipped.full, 1)
+end)
+
+local function listening(event)
+    for _, f in ipairs(stub.frames) do
+        if f.events[event] then return true end
+    end
+    return false
+end
+
+test("invite from solo: 4, a raid on the first join, then the rest", function()
+    local r = ns.Rosters.Create("Invites")
+    for _, n in ipairs({ "A", "B", "C", "D", "E", "F-Stormrage", "Off" }) do ns.Rosters.Add(r.id, Players.Key(n)) end
+    stub.guild = { { "Off-Silvermoon", false }, { "E-Silvermoon", true } }
+    stub.invited, stub.converted = {}, 0
+    local states = {}
+    ns.On("INVITE_STATE", "test", function(_, kind, n) states[#states + 1] = kind .. ":" .. tostring(n) end)
+    local Invite = ns.Invite
+    assert(Invite:Start(r.members))
+    eq(table.concat(stub.invited, ","), "E,A,B,C", "known online first, our realm by bare name")
+    eq(states[1], "waiting:4")
+    assert(listening("GROUP_ROSTER_UPDATE"), "waits for the party")
+    stub.fire("GROUP_ROSTER_UPDATE")
+    eq(stub.converted, 0, "nobody joined yet")
+    stub.party = { "A" }
+    stub.combat.player = true
+    stub.fire("GROUP_ROSTER_UPDATE")
+    eq(stub.converted, 0, "not in combat")
+    stub.combat.player = nil
+    stub.fire("PLAYER_REGEN_ENABLED")
+    eq(stub.converted, 1, "after combat")
+    stub.fire("GROUP_ROSTER_UPDATE")
+    eq(stub.converted, 2, "asks again while the group forms")
+    stub.party = {}
+    stub.inRaid = true
+    stub.fire("GROUP_ROSTER_UPDATE")
+    eq(table.concat(stub.invited, ",", 5), "D,F-Stormrage", "the rest once in a raid")
+    eq(states[#states], "raid:2")
+    assert(not Invite.running and not listening("GROUP_ROSTER_UPDATE") and not listening("PLAYER_REGEN_ENABLED"),
+        "done and unregistered")
+
+    -- in a raid: everyone at once, nothing to wait for
+    stub.invited = {}
+    assert(Invite:Start(r.members))
+    eq(#stub.invited, 6)
+    assert(not Invite.running and not listening("GROUP_ROSTER_UPDATE"))
+    stub.notLeader = true
+    local ok, why = Invite:Start(r.members)
+    assert(not ok and why:find("assistant"), "assistants and the leader only")
+    stub.notLeader, stub.inRaid = nil, false
+
+    -- a party member who is not the leader cannot invite; the leader converts first
+    stub.party = { "A", "B-Stormrage" }
+    stub.notLeader = true
+    eq(Invite:CanInvite(), false)
+    stub.notLeader = nil
+    stub.invited, stub.converted = {}, 0
+    assert(Invite:Start(r.members))
+    eq(stub.converted, 1)
+    eq(#stub.invited, 0, "waits for the raid")
+    stub.party = {}
+    stub.fire("GROUP_ROSTER_UPDATE")
+    eq(states[#states], "left:nil", "the party broke up")
+    assert(not listening("GROUP_ROSTER_UPDATE"))
+
+    -- solo again, then cancelled
+    assert(Invite:Start(r.members))
+    Invite:Stop()
+    eq(states[#states], "stopped:nil")
+    assert(not listening("GROUP_ROSTER_UPDATE"))
+
+    -- few enough for a party: invite and done
+    local small = ns.Rosters.Create("Small")
+    ns.Rosters.Add(small.id, "A-Silvermoon")
+    ns.Rosters.Add(small.id, "B-Silvermoon")
+    stub.invited = {}
+    assert(Invite:Start(small.members))
+    eq(#stub.invited, 2)
+    eq(states[#states], "sent:2")
+    assert(not Invite.running and not listening("GROUP_ROSTER_UPDATE"))
+    stub.party = { "A" }
+    stub.invited = {}
+    assert(Invite:Start(small.members))
+    eq(table.concat(stub.invited, ","), "B", "room in the party: no raid needed")
+    eq(stub.converted, 1)
+    assert(not Invite.running)
+    assert(Invite:Start(r.members))
+    assert(Invite.running and stub.converted == 2, "5 more do not fit the party")
+    Invite:Stop()
+    stub.party = {}
+    ns.Rosters.Delete(small.id)
+
+    ns.On("INVITE_STATE", "test", nil)
+    stub.guild, stub.invited = {}, {}
+    ns.Rosters.Delete(r.id)
 end)
 
 print(string.format("%d passed, %d failed", passed, failed))

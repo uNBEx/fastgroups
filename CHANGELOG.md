@@ -13,10 +13,18 @@ All notable changes to FastGroups. Newest first. Versions follow
   Shift-click Auto-split to rebalance everyone from scratch.
 - Auto-split spreads each half's healers over its groups.
 - The balance chip only warns about what Auto-split evens out.
+- An absent loadout player who joins the raid takes their planned slot back. Before, they waited
+  with the newcomers and Auto-fill could give them someone else's slot.
 - Loadouts remember the "Groups used" setting (Auto / 4 / 6) and restore it when loaded. Loadouts
   saved before this keep the current setting.
 
 ### Added
+- Invite a roster: an "Invite" button on the Rosters page and on the planning banner invites
+  everyone on the roster who is not in your group yet, skipping guild members who are offline.
+  Solo, the first 4 invites go out and the party becomes a raid when one of them joins; then the
+  rest are invited.
+- Invite a loadout: opened outside a raid, a loadout's banner has "Invite" for everyone in it, the
+  same way as a roster. Loaded into the live raid, "Invite absent" invites the players who are missing.
 - Option "Strict melee/ranged balance" (off by default): Auto-split also moves placed players to
   even out melee and ranged.
 - Option "Whisper players who switch halves" (on by default): after Apply, players a later

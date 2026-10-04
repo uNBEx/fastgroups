@@ -56,11 +56,25 @@ Enum = { CompressionMethod = { Deflate = 0 } }
 function GetSpecializationInfoByID(id) return id, "Spec" .. id, "", 12345, "DAMAGER" end
 function GetNormalizedRealmName() return "Silvermoon" end
 function GetRealmName() return "Silvermoon" end
-function UnitName() return "Tester" end
+stub.party = {}         -- party1..4 names ("Name" or "Name-Realm")
+function UnitName(u)
+    local i = u and tonumber(u:match("^party(%d)$"))
+    if i then
+        local name = stub.party[i]
+        if not name then return nil end
+        local short, realm = name:match("^(.-)%-(.+)$")
+        return short or name, realm
+    end
+    return "Tester"
+end
 function IsInRaid() return stub.inRaid end
 function IsShiftKeyDown() return stub.shift and true or false end
 function IsInGuild() return true end
-function IsInGroup(category) return stub.inRaid and category ~= 2 end
+function IsInGroup(category) return (stub.inRaid or #stub.party > 0) and category ~= 2 end
+function GetNumGroupMembers()
+    if stub.inRaid then return stub.raidSize or 1 end
+    return #stub.party > 0 and #stub.party + 1 or 0
+end
 stub.inspected = {}     -- units passed to NotifyInspect
 function NotifyInspect(u) table.insert(stub.inspected, u) end
 function ClearInspectPlayer() end
@@ -76,7 +90,7 @@ ERR_GROUP_SWAP_FAILED = "Players in raid combat cannot change raid subgroups"
 stub.moves = {}         -- { "set", index, group } / { "swap", a, b }
 function SetRaidSubgroup(i, g) table.insert(stub.moves, { "set", i, g }) end
 function SwapRaidSubgroup(a, b) table.insert(stub.moves, { "swap", a, b }) end
-function UnitIsGroupLeader() return true end
+function UnitIsGroupLeader(u) return not (u == "player" and stub.notLeader) end
 function UnitIsGroupAssistant() return false end
 function IsEveryoneAssistant() return false end
 function HasLFGRestrictions() return false end
@@ -86,14 +100,24 @@ C_PartyInfo = {
     PromoteToLeader = function(name) stub.promoted = { name, 2 } end,
     PromoteToAssistant = function(name) stub.promoted = { name, 1 } end,
     DemoteAssistant = function(name) stub.promoted = { name, 0 } end,
+    InviteUnit = function(name) table.insert(stub.invited, name) end,
+    ConvertToRaid = function() stub.converted = (stub.converted or 0) + 1 end,
 }
+stub.invited = {}       -- names passed to InviteUnit
 function UnitAffectingCombat(u) return stub.combat[u] and true or false end
 function UnitIsUnit(a, b) return a == b end
 function UnitGroupRolesAssigned() return "NONE" end
 function GetInstanceInfo() return "Test", "none", 0 end
 function GetRaidDifficultyID() return 14 end
 function GetRaidRosterInfo() return nil end
-function GetNumGuildMembers() return 0 end
+stub.guild = {}         -- guild roster: { "Name-Realm", online }
+function GetNumGuildMembers() return #stub.guild end
+function GetGuildRosterInfo(i)
+    local g = stub.guild[i]
+    if g then return g[1], "Member", 1, 80, "", "", "", "", g[2], 0, "MAGE" end
+end
+stub.guildRequests = 0
+C_GuildInfo = { GuildRoster = function() stub.guildRequests = stub.guildRequests + 1 end }
 
 C_SpecializationInfo = {
     GetSpecialization = function() return nil end,

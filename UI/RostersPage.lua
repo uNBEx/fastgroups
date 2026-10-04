@@ -298,6 +298,12 @@ function Page:Build(f)
     d.add.chev:SetPoint("RIGHT", -10, 0)
     d.add:SetWidth(d.add:GetWidth() + 14)
     d.add:SetPoint("RIGHT", d.plan, "LEFT", -6, 0)
+    d.invite = W.Button(d, { text = "Invite", icon = "send", onClick = function() UI.InviteRoster(Page.selected) end,
+        tooltip = function(b)
+            W.Tooltip(b, b.label:GetText(), { ns.Invite.running and "Waiting for the first player to join, then the rest are invited. Click to cancel."
+                or "Invite everyone on this roster who is not in your group yet." })
+        end })
+    d.invite:SetPoint("RIGHT", d.add, "LEFT", -6, 0)
     d.name:SetPoint("LEFT", d, "TOPLEFT", 16, -28)
     d.counts:SetPoint("TOPLEFT", 16, -50)
     d.counts:SetPoint("RIGHT", -16, 0)
@@ -378,7 +384,12 @@ function Page:Refresh()
     local d = self.detail
     local r = Rosters.Find(self.selected)
     local has = r ~= nil
-    for _, x in ipairs({ d.rename, d.delete, d.plan, d.add, d.head }) do x:SetShown(has) end
+    -- seen by OnRoster, so roster events only redraw when these change
+    ns.Raid:Refresh()
+    self.raidVersion = ns.Raid.version
+    local canInvite, why = ns.Invite:CanInvite()
+    self.canInvite = canInvite
+    for _, x in ipairs({ d.rename, d.delete, d.plan, d.add, d.invite, d.head }) do x:SetShown(has) end
     if not r then
         d.name:SetText("No roster yet")
         d.name:SetWidth(0)
@@ -388,10 +399,29 @@ function Page:Refresh()
         for _, row in ipairs(self.memberRows) do row:Hide() end
         return
     end
+    local missing = 0
+    for _, key in ipairs(r.members) do
+        if not ns.Raid.members[key] then missing = missing + 1 end
+    end
+    if ns.Invite.running then
+        d.invite:SetLabel("Cancel")
+        d.invite:SetDisabled(false)
+    else
+        d.invite:SetLabel("Invite")
+        if #r.members == 0 then
+            d.invite:SetDisabled(true, "Add players first.")
+        elseif not canInvite then
+            d.invite:SetDisabled(true, why)
+        elseif missing == 0 then
+            d.invite:SetDisabled(true, "Everyone is already in your group.")
+        else
+            d.invite:SetDisabled(false)
+        end
+    end
     -- long names are cut before the buttons; the rename and delete icons follow the name
     d.name:SetText(r.name)
     local room = d:GetWidth() - 16 - 4 * 2 - d.rename:GetWidth() - d.delete:GetWidth() - 12
-        - d.add:GetWidth() - 6 - d.plan:GetWidth() - 14
+        - d.invite:GetWidth() - 6 - d.add:GetWidth() - 6 - d.plan:GetWidth() - 14
     d.name:SetWidth(math.max(40, math.min(d.name:GetUnboundedStringWidth() + 2, room)))
     local c = { T = 0, H = 0, M = 0, R = 0, ["?"] = 0 }
     for _, key in ipairs(r.members) do
@@ -415,7 +445,6 @@ function Page:Refresh()
     for i, key in ipairs(r.members) do keys[i] = key end
     Board.SortKeys(keys)
     local child = self.members.child
-    ns.Raid:Refresh()
     for i, key in ipairs(keys) do
         local row = self.memberRows[i]
         if not row then
@@ -464,5 +493,14 @@ function Page:Refresh()
         d.empty:Show()
     else
         d.empty:Hide()
+    end
+end
+
+-- Group changed while the page is open: redraw when the raid or our right
+-- to invite did.
+function Page:OnRoster()
+    ns.Raid:Refresh()
+    if ns.Raid.version ~= self.raidVersion or (ns.Invite:CanInvite()) ~= self.canInvite then
+        self:Refresh()
     end
 end

@@ -485,6 +485,20 @@ function Board:AutoSource(force)
     end
 end
 
+-- An absent loadout player joined: they take their own slot back.
+local function reclaim(self, key)
+    for i, gh in ipairs(self.ghosts) do
+        if gh.key == key then
+            tremove(self.ghosts, i)
+            self:AddMember(key, gh.group)
+            if gh.side then self.sides[key] = gh.side end
+            self.loaded.present = self.loaded.present + 1
+            return true
+        end
+    end
+    return false
+end
+
 -- Merge live roster changes into the draft. Players the user has not moved
 -- follow their live group; joiners and leavers are added / removed.
 function Board:Sync()
@@ -495,9 +509,11 @@ function Board:Sync()
     for key, m in pairs(live) do
         if not self.isMember[key] then
             if self.loaded then
-                self:AddMember(key, 0)
-                local lo = self.loaded.lo
-                self.tags[key] = (lo.memory and lo.memory[key]) and "ret" or "new"
+                if not reclaim(self, key) then
+                    self:AddMember(key, 0)
+                    local lo = self.loaded.lo
+                    self.tags[key] = (lo.memory and lo.memory[key]) and "ret" or "new"
+                end
             elseif self:Occupancy(m.group) < GROUP_SIZE then
                 self:AddMember(key, m.group)
             else

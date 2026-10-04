@@ -27,6 +27,7 @@ Core\Board.lua
 Core\Split.lua
 Core\Loadouts.lua
 Core\Rosters.lua
+Core\Invite.lua
 Core\Apply.lua
 Core\Announce.lua
 Core\Demo.lua

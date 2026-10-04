@@ -161,7 +161,6 @@ function GetDifficultyInfo(id) return "Difficulty " .. tostring(id) end
 function CreateColor(r, g, b, a) return { r = r, g = g, b = b, a = a } end
 function SetRaidSubgroup(i, g) stub.lastSet = { i, g } end
 function SwapRaidSubgroup(a, b) stub.lastSwap = { a, b } end
-C_GuildInfo = { GuildRoster = noop }
 Enum.UITextureSliceMode = { Stretched = 0, Tiled = 1 }
 function GetCursorPosition() return 400, 300 end
 function SetCursor() end

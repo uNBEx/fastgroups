@@ -9,7 +9,7 @@ local ns = {}
 M.fontsLoaded = false
 local FILES = {
     "Core/Init.lua", "Core/Data.lua", "Core/Players.lua", "Core/Raid.lua", "Core/Board.lua",
-    "Core/Split.lua", "Core/Loadouts.lua", "Core/Rosters.lua", "Core/Apply.lua", "Core/Announce.lua", "Core/Demo.lua",
+    "Core/Split.lua", "Core/Loadouts.lua", "Core/Rosters.lua", "Core/Invite.lua", "Core/Apply.lua", "Core/Announce.lua", "Core/Demo.lua",
     "Core/Inspect.lua", "Core/SpecComm.lua", "Core/Serialize.lua", "Core/Comm.lua",
     "UI/Theme.lua", "UI/Widgets.lua", "UI/Main.lua", "UI/GroupsPage.lua", "UI/RostersPage.lua",
     "UI/SharePage.lua", "UI/OptionsPage.lua", "UI/Minimap.lua",
@@ -144,9 +144,9 @@ step("card context menus", function()
     check(#groups.activeCards == 20, "demo restored")
 end)
 
-local function modalButton(label)
+local function modalButton(label, except)
     for _, o in ipairs(M.objects) do
-        if o._kind == "Button" and o.label and o.label._text == label and o:IsVisible() then return o end
+        if o._kind == "Button" and o ~= except and o.label and o.label._text == label and o:IsVisible() then return o end
     end
 end
 
@@ -253,6 +253,26 @@ step("save dialog and load loadout", function()
     check(ns.Loadouts.List()[1].name == "Untitled", "saved as Untitled: " .. tostring(ns.Loadouts.List()[1].name))
 end)
 
+step("invite a loadout opened for editing", function()
+    local source = Board.source
+    Board:SetSource("none")
+    UI.LoadLoadout(ns.Loadouts.List()[1].id)
+    check(Board.source == "loadout", "opened for editing")
+    local inv = groups.banner.b2
+    check(inv:IsVisible() and inv.label._text == "Invite", "editing banner invites")
+    local before = #stub.invited
+    inv.scripts.OnClick(inv)
+    local ok = modalButton("Invite", inv)
+    check(ok, "invite asks first")
+    ok.scripts.OnClick(ok)
+    check(#stub.invited == before + 4 and ns.Invite.running, "solo: 4 invites, then waits")
+    groups:Refresh()
+    check(inv.label._text == "Cancel invites", "cancel while waiting")
+    inv.scripts.OnClick(inv)
+    check(not ns.Invite.running, "cancelled")
+    Board:SetSource(source)
+end)
+
 step("load sample with absentees, auto-fill", function()
     local sample
     for _, lo in ipairs(ns.Loadouts.List()) do
@@ -264,6 +284,17 @@ step("load sample with absentees, auto-fill", function()
     local ghosts = 0
     for _, c in ipairs(groups.activeCards) do if c.ghost then ghosts = ghosts + 1 end end
     check(ghosts == 3, "ghost cards " .. ghosts)
+    check(not groups.banner.b3:IsShown(), "the demo invites nobody")
+    -- the same board as a live raid (stand-in: the stub has no raid roster)
+    Board.source = "live"
+    groups:Refresh()
+    local inv = groups.banner.b3
+    check(inv:IsVisible() and inv.label._text == "Invite absent", "invite absent on a live raid")
+    inv.scripts.OnClick(inv)
+    check(modalButton("Invite"), "invite absent asks first")
+    UI.CloseModal()
+    Board.source = "demo"
+    groups:Refresh()
     groups.banner.b1.scripts.OnClick(groups.banner.b1)
     check(#Board.ghosts == 0, "filled")
 end)
@@ -296,9 +327,22 @@ step("rosters page", function()
     check(#entries == 3 and entries[1].text == "From guild...", "add players menu")
     entries[1].fn()
     ns.W.CloseMenu()
+    UI.CloseModal()
+    local invite = page.detail.invite
+    check(invite:IsVisible() and not invite.disabled, "invite button enabled")
+    invite.scripts.OnClick(invite)
+    local ok = modalButton("Invite")
+    check(ok, "invite asks first")
+    local before = #stub.invited
+    ok.scripts.OnClick(ok)
+    check(#stub.invited == before + 4 and ns.Invite.running, "solo: 4 invites, then waits")
+    check(invite.label._text == "Cancel", "button cancels while waiting")
+    invite.scripts.OnClick(invite)
+    check(not ns.Invite.running and invite.label._text == "Invite", "cancelled")
     page.detail.plan.scripts.OnClick(page.detail.plan)
     check(Board.source == "roster", "planning source")
     check(UI.current == "groups", "switched to groups")
+    check(groups.banner.b2:IsVisible() and groups.banner.b2.label._text == "Invite roster", "banner invites the roster")
     groups.split.scripts.OnClick(groups.split)
 end)
 
