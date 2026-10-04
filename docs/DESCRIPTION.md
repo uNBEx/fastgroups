@@ -35,6 +35,8 @@ This is also very useful for PUGs, as you can quickly set up the groups even whe
 - **Loadouts**: save setups per boss. Loading one shows who is missing, new or returning, and
   **Auto-fill** puts substitutes into the empty slots.
 - **Rosters**: plan groups from your guild before the raid forms.
+- **Invites**: invite a whole roster or loadout with one button, or just the players a loaded
+  loadout is missing.
 - **Sharing**: export strings, or send a loadout in game to another FastGroups user.
 - **Specs** from BigWigs / LibSpecialization broadcasts and quiet, paced inspects.
 

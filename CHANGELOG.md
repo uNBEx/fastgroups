@@ -4,7 +4,22 @@ All notable changes to FastGroups. Newest first. Versions follow
 [Semantic Versioning](https://semver.org); the format follows
 [Keep a Changelog](https://keepachangelog.com).
 
-## Unreleased
+## v0.3.0 - 2026-10-04
+
+### Added
+- Invite a roster: "Invite" on the Rosters page and "Invite roster" on the planning banner invite
+  everyone on the roster who is not in your group yet, skipping guild members who are offline.
+  Solo, the first 4 invites go out and the party becomes a raid when one of them joins; then the
+  rest are invited.
+- Invite a loadout: opened outside a raid, a loadout's banner has "Invite" for everyone in it, the
+  same way as a roster. Loaded into the live raid, "Invite absent" invites the players who are missing.
+- Option "Strict melee/ranged balance" (off by default): Auto-split also moves placed players to
+  even out melee and ranged.
+- Option "Whisper players who switch halves" (on by default): after Apply, players a later
+  Auto-split had to send to the other half get a whisper with their new group. Never more than
+  three at once.
+- "Don't ask again" check box on the Apply confirmation. The "Confirm before Apply" option brings
+  the dialog back.
 
 ### Changed
 - Auto-split keeps players on their half when the raid changes between pulls. Players an earlier
@@ -17,19 +32,18 @@ All notable changes to FastGroups. Newest first. Versions follow
   with the newcomers and Auto-fill could give them someone else's slot.
 - Loadouts remember the "Groups used" setting (Auto / 4 / 6) and restore it when loaded. Loadouts
   saved before this keep the current setting.
+- Apply checks for combat when you press it instead of greying out. It refuses during a boss
+  encounter, while you are in combat, and inside an instance while a player who has to move is in
+  combat. In the open world, players who are fighting are still moved.
 
-### Added
-- Invite a roster: an "Invite" button on the Rosters page and on the planning banner invites
-  everyone on the roster who is not in your group yet, skipping guild members who are offline.
-  Solo, the first 4 invites go out and the party becomes a raid when one of them joins; then the
-  rest are invited.
-- Invite a loadout: opened outside a raid, a loadout's banner has "Invite" for everyone in it, the
-  same way as a roster. Loaded into the live raid, "Invite absent" invites the players who are missing.
-- Option "Strict melee/ranged balance" (off by default): Auto-split also moves placed players to
-  even out melee and ranged.
-- Option "Whisper players who switch halves" (on by default): after Apply, players a later
-  Auto-split had to send to the other half get a whisper with their new group. Never more than
-  three at once.
+### Fixed
+- The Apply button could stay greyed out after combat.
+- Apply no longer stalls when the server refuses a move: those players are skipped and the
+  remaining moves go on.
+- Two-line toasts, the first dialog of a session and the import result on the Share page no
+  longer cut off their text.
+- Resizing the window right after a reload did nothing; later resizes could start from the
+  previous size.
 
 ## v0.2.0 - 2026-09-27
 

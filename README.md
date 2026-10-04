@@ -41,13 +41,19 @@ changing from boss to boss.
   melee and ranged count as much as healers.
 - **Draft, then Apply**: edit freely; nothing changes in the real raid until you press Apply.
   FastGroups then moves players one at a time, waiting for the server to confirm each move,
-  and stops if combat starts.
+  and stops if combat starts. Pressing Apply in combat, during a boss encounter, or in an instance
+  while a player who has to move is fighting is refused; in the open world fighting players are
+  moved.
 - **Loadouts**: save any number of setups (per boss, farm, progress). Loading one shows who is
   missing today (greyed ABSENT cards), who is new and who is returning. **Auto-fill** puts
   substitutes into the missing players' slots (same role, same melee/ranged, same class if
-  possible) and sends returning players back to the half they were on before.
+  possible) and sends returning players back to the half they were on before. Absent players who
+  join take their planned slot back; "Invite absent" invites the ones still missing.
 - **Rosters**: hand-picked lists of guildmates (from the guild roster, your current raid or by
   name). Plan groups days ahead, save the plan as a loadout, load it when the raid forms.
+- **Invites**: invite a whole roster or loadout with one button. Players already in the group and
+  guild members who are offline are skipped. Solo, the first invites go out, the party becomes a
+  raid when one of them joins, then the rest are invited.
 - **Sharing**: export loadouts as a text string for Discord, or send them in game to another
   FastGroups user over the hidden addon channel (the receiver gets an accept prompt). Your
   personal settings are only included when you ask for it.
