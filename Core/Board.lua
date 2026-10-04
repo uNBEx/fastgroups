@@ -15,6 +15,7 @@ local Board = {
     ghosts = {},        -- array of { key, group, side } for absent loadout players
     subs = {},          -- key -> absent key this player replaces
     tags = {},          -- key -> "new" | "ret"
+    flipped = {},       -- key -> live side before a normal Auto-split sent this settled player across
     lastLive = {},      -- key -> live group at the previous sync
     liveVersion = nil,  -- ns.Raid.version the board last synced with
     loaded = nil,       -- reconcile summary of the loaded loadout
@@ -27,6 +28,16 @@ local MAX_GROUPS = 8
 local GROUP_SIZE = 5
 
 local function settings() return ns.settings end
+
+-- Players an earlier Auto-split placed. The live raid keeps them in the
+-- saved variables so a /reload does not forget them; other boards keep
+-- them until the source changes.
+local planSettled = {}
+
+function Board:Settled()
+    if self.source == "live" then return ns.db.settled end
+    return planSettled
+end
 
 ---------------------------------------------------------------------------
 -- Geometry
@@ -317,15 +328,30 @@ end
 local imbalanceList = {}
 local BUCKET_KEYS = { "T", "H", "M", "R" }
 
--- Returns an array of uneven categories: "T", "H", "M", "R" and class files.
+-- True when a raid-debuff class is missing on one half although there are
+-- two or more to share.
+function Board.Missing(a, b)
+    return a + b >= 2 and (a == 0 or b == 0)
+end
+
+-- Is this role count one Auto-split always evens out? Melee and ranged only
+-- with strict balance on.
+function Board.Strict(b)
+    return b == "T" or b == "H" or ((b == "M" or b == "R") and settings().strictPositions and true or false)
+end
+
+-- Returns an array of what Auto-split promises but the board lacks: uneven
+-- "T", "H" (and "M", "R" when strict), and class files missing on a half.
 function Board:Imbalances()
     wipe(imbalanceList)
     local L, R = self:Counts("L"), self:Counts("R")
     for _, b in ipairs(BUCKET_KEYS) do
-        if Board.Uneven(L[b], R[b]) then tinsert(imbalanceList, b) end
+        if Board.Strict(b) and Board.Uneven(L[b], R[b]) then tinsert(imbalanceList, b) end
     end
     for _, class in ipairs(Data.CLASSES) do
-        if Board.Uneven(L.cls[class] or 0, R.cls[class] or 0) then tinsert(imbalanceList, class) end
+        if Data.BUFF_CLASSES[class] and Board.Missing(L.cls[class] or 0, R.cls[class] or 0) then
+            tinsert(imbalanceList, class)
+        end
     end
     return imbalanceList
 end
@@ -368,6 +394,8 @@ function Board:Clear()
     wipe(self.draft)
     wipe(self.sides)
     wipe(self.lastLive)
+    wipe(self.flipped)
+    wipe(planSettled)
     clearLoadState(self)
 end
 
@@ -390,6 +418,9 @@ function Board:RemoveMember(key)
     self.lastLive[key] = nil
     self.tags[key] = nil
     self.subs[key] = nil
+    self.flipped[key] = nil
+    -- someone who leaves and comes back counts as new
+    self:Settled()[key] = nil
 end
 
 function Board:SetSource(src, id)
@@ -445,8 +476,12 @@ function Board:AutoSource(force)
         elseif force or self.source == "none" then
             self:SetSource("live")
         end
-    elseif self.source == "live" or (force and self.source ~= "none") then
-        self:SetSource("none")
+    else
+        -- out of a raid: the next one starts with nobody settled
+        wipe(ns.db.settled)
+        if self.source == "live" or (force and self.source ~= "none") then
+            self:SetSource("none")
+        end
     end
 end
 
@@ -586,6 +621,7 @@ function Board:Revert()
     if not self:IsLiveLike() then return end
     local live = self:Live()
     clearLoadState(self)
+    wipe(self.flipped)
     self.activeLoadout = nil
     for _, key in ipairs(self.members) do
         local m = live[key]
@@ -695,6 +731,7 @@ function Board:ApplyLoadout(lo)
     self:AdoptMode(lo)
     local conv, k = settings().conv, self:K()
     clearLoadState(self)
+    wipe(self.flipped)
     local present, absent, fresh, returning = 0, 0, 0, 0
     local memory = lo.memory or {}
     wipe(movedTmp)

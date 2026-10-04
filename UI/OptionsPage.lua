@@ -209,6 +209,8 @@ function Page:Build(f)
             Board:SetShared(v)
             ns.Fire("SETTINGS_CHANGED", "sharedGroup")
         end))
+    grp:AddRow("Strict melee/ranged balance", "Auto-split moves placed players for it. Off: newcomers even it out",
+        toggle("strictPositions"))
     grp:AddRow("Arrange columns by half", "Off: groups in order with side tags", toggle("arrangeByHalf"))
     grp:AddRow("Sort inside a group", "Tanks, healers, melee, ranged first",
         seg({ { "role", "Then name" }, { "class", "Then class" } }, "sortMode"))
@@ -230,6 +232,8 @@ function Page:Build(f)
     ann:AddRow("Announce after Apply", "Posts when all moves are done", toggle("announceOnApply"))
     ann:AddRow("What to announce", "All: also which groups form each half",
         seg({ { "shared", "Shared group" }, { "all", "All groups" } }, "announceWhat"))
+    ann:AddRow("Whisper players who switch halves", "When Auto-split had to move them, after Apply",
+        toggle("whisperSwitches"))
     self.ann = ann
 
     -- Sharing

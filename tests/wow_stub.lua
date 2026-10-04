@@ -58,6 +58,7 @@ function GetNormalizedRealmName() return "Silvermoon" end
 function GetRealmName() return "Silvermoon" end
 function UnitName() return "Tester" end
 function IsInRaid() return stub.inRaid end
+function IsShiftKeyDown() return stub.shift and true or false end
 function IsInGuild() return true end
 function IsInGroup(category) return stub.inRaid and category ~= 2 end
 stub.inspected = {}     -- units passed to NotifyInspect
@@ -100,10 +101,10 @@ C_SpecializationInfo = {
     GetInspectSpecialization = function() return 0 end,
 }
 
-stub.chat = {}          -- chat lines sent: { msg, chatType }
+stub.chat = {}          -- chat lines sent: { msg, chatType, target }
 C_ChatInfo = {
     RegisterAddonMessagePrefix = noop,
-    SendChatMessage = function(msg, chatType) table.insert(stub.chat, { msg, chatType }) end,
+    SendChatMessage = function(msg, chatType, _, target) table.insert(stub.chat, { msg, chatType, target }) end,
     InChatMessagingLockdown = function() return false end,
     SendAddonMessage = function(prefix, msg, chatType, target)
         table.insert(stub.sent, { prefix, msg, chatType, target })

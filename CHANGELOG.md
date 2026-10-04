@@ -4,6 +4,23 @@ All notable changes to FastGroups. Newest first. Versions follow
 [Semantic Versioning](https://semver.org); the format follows
 [Keep a Changelog](https://keepachangelog.com).
 
+## Unreleased
+
+### Changed
+- Auto-split keeps players on their half when the raid changes between pulls. Players an earlier
+  split placed only move for tanks, healers, half sizes or a Monk / Demon Hunter on each half;
+  newcomers even out melee, ranged and classes. Before, a new class mix could reshuffle the raid.
+  Shift-click Auto-split to rebalance everyone from scratch.
+- Auto-split spreads each half's healers over its groups.
+- The balance chip only warns about what Auto-split evens out.
+
+### Added
+- Option "Strict melee/ranged balance" (off by default): Auto-split also moves placed players to
+  even out melee and ranged.
+- Option "Whisper players who switch halves" (on by default): after Apply, players a later
+  Auto-split had to send to the other half get a whisper with their new group. Never more than
+  three at once.
+
 ## v0.2.0 - 2026-09-27
 
 First public release.

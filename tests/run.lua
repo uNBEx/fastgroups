@@ -113,6 +113,345 @@ test("split converts between conventions without moves on balance", function()
 end)
 
 ---------------------------------------------------------------------------
+-- Split.Compute on made-up raids. rows: { key, bucket, class, group }.
+local function compute(rows, settled, strict, L, R)
+    local keys, info, current = {}, {}, {}
+    for i, row in ipairs(rows) do
+        keys[i] = row[1]
+        info[row[1]] = { bucket = row[2], class = row[3] }
+        current[row[1]] = row[4]
+    end
+    return ns.Split.Compute({
+        keys = keys, info = function(k) return info[k] end, current = current,
+        L = L or { 1, 3 }, R = R or { 2, 4 }, settled = settled, strictPos = strict,
+    })
+end
+
+local function sideOf(g) return (g % 2 == 1) and "L" or "R" end
+
+-- per side counts of a result: n, buckets and classes
+local function tally(rows, result)
+    local c = { L = { n = 0, cls = {} }, R = { n = 0, cls = {} } }
+    for _, t in pairs(c) do for _, b in ipairs({ "T", "H", "M", "R" }) do t[b] = 0 end end
+    for _, row in ipairs(rows) do
+        local t = c[sideOf(result[row[1]])]
+        t.n = t.n + 1
+        t[row[2]] = t[row[2]] + 1
+        t.cls[row[3]] = (t.cls[row[3]] or 0) + 1
+    end
+    return c.L, c.R
+end
+
+-- 20 players, all settled: tanks and healers given, damage dealers from dps
+local function settledRaid(dps)
+    local rows, settled = {}, {}
+    local fixed = { { "T", "WARRIOR" }, { "T", "PALADIN" }, { "H", "PRIEST" }, { "H", "PRIEST" },
+        { "H", "DRUID" }, { "H", "DRUID" } }
+    -- tanks and healers alternate halves: L gets the odd ones
+    for i, f in ipairs(fixed) do
+        local key = "f" .. i
+        rows[#rows + 1] = { key, f[1], f[2], (i % 2 == 1) and 1 or 2 }
+        settled[key] = true
+    end
+    for i, d in ipairs(dps) do
+        local key = "d" .. i
+        rows[#rows + 1] = { key, d[1], d[2], d[3] }
+        settled[key] = true
+    end
+    return rows, settled
+end
+
+test("pug churn: settled players keep their side", function()
+    local seed = 4242
+    local function rnd(n)
+        seed = (seed * 16807) % 2147483647
+        return seed % n + 1
+    end
+    -- no Monks or Demon Hunters: their coverage rule may move settled players on purpose
+    local CLS = { "WARRIOR", "ROGUE", "MAGE", "WARLOCK", "HUNTER", "PRIEST", "SHAMAN", "EVOKER", "DEATHKNIGHT" }
+    local rows, settled, n = {}, {}, 0
+    local function newRow(bucket, g)
+        n = n + 1
+        return { "p" .. n, bucket, CLS[rnd(#CLS)], g }
+    end
+    local roles = { "T", "T", "H", "H", "H", "H" }
+    for i = 1, 20 do
+        rows[i] = newRow(roles[i] or (rnd(2) == 1 and "M" or "R"), math.floor((i - 1) / 5) + 1)
+    end
+    local function run()
+        local result = compute(rows, settled)
+        for _, row in ipairs(rows) do
+            row[4] = result[row[1]]
+            settled[row[1]] = true
+        end
+    end
+    run()
+    for pull = 1, 10 do
+        local fresh = {}
+        for _ = 1, 2 do
+            local i
+            repeat i = rnd(#rows) until rows[i][2] == "M" or rows[i][2] == "R"
+            settled[rows[i][1]] = nil
+            rows[i] = newRow(rnd(2) == 1 and "M" or "R", rows[i][4])
+            fresh[rows[i][1]] = true
+        end
+        local before = {}
+        for _, row in ipairs(rows) do before[row[1]] = sideOf(row[4]) end
+        run()
+        local L, R = tally(rows, (function()
+            local r = {}
+            for _, row in ipairs(rows) do r[row[1]] = row[4] end
+            return r
+        end)())
+        eq(L.n, R.n, "pull " .. pull .. ": sizes")
+        eq(L.T, R.T, "pull " .. pull .. ": tanks")
+        eq(L.H, R.H, "pull " .. pull .. ": healers")
+        for _, row in ipairs(rows) do
+            if not fresh[row[1]] then eq(sideOf(row[4]), before[row[1]], "pull " .. pull .. ": " .. row[1]) end
+        end
+    end
+end)
+
+test("a forced healer crossing moves one settled healer", function()
+    -- build a balanced raid by hand: L = groups 1, 3; R = groups 2, 4
+    local rows, settled = settledRaid({})
+    local fill = { [1] = 0, [2] = 0, [3] = 0, [4] = 0 }
+    for _, row in ipairs(rows) do fill[row[4]] = fill[row[4]] + 1 end
+    for i = 1, 14 do
+        local g = (i <= 7) and ((fill[1] < 5) and 1 or 3) or ((fill[2] < 5) and 2 or 4)
+        fill[g] = fill[g] + 1
+        local key = "d" .. i
+        rows[#rows + 1] = { key, (i % 2 == 0) and "M" or "R", "MAGE", g }
+        settled[key] = true
+    end
+    local result = compute(rows, settled)
+    for _, row in ipairs(rows) do eq(sideOf(result[row[1]]), sideOf(row[4]), "balanced raid stays: " .. row[1]) end
+    -- both healers on the left leave; two new damage dealers take their slots
+    local newRows = {}
+    for _, row in ipairs(rows) do
+        if row[2] == "H" and sideOf(row[4]) == "L" then
+            newRows[#newRows + 1] = { "new" .. row[1], "R", "MAGE", row[4] }
+        else
+            newRows[#newRows + 1] = row
+        end
+    end
+    result = compute(newRows, settled)
+    local L, R = tally(newRows, result)
+    eq(L.H, 1) eq(R.H, 1)
+    eq(L.n, R.n, "sizes")
+    local crossed = {}
+    for _, row in ipairs(newRows) do
+        if sideOf(result[row[1]]) ~= sideOf(row[4]) then crossed[#crossed + 1] = row end
+    end
+    eq(#crossed, 2, "a healer and a damage dealer swap")
+    local settledCrossed = 0
+    for _, row in ipairs(crossed) do
+        if settled[row[1]] then
+            settledCrossed = settledCrossed + 1
+            eq(row[2], "H", "the settled one is the healer")
+        end
+    end
+    eq(settledCrossed, 1)
+end)
+
+test("melee and ranged: soft by default, strict on request, free on a fresh split", function()
+    -- L: tanks, healers and 7 melee; R: tanks, healers and 7 ranged
+    local rows, settled = settledRaid({})
+    local fill = { [1] = 0, [2] = 0, [3] = 0, [4] = 0 }
+    for _, row in ipairs(rows) do fill[row[4]] = fill[row[4]] + 1 end
+    for i = 1, 14 do
+        local left = i <= 7
+        local g = left and ((fill[1] < 5) and 1 or 3) or ((fill[2] < 5) and 2 or 4)
+        fill[g] = fill[g] + 1
+        rows[#rows + 1] = { "d" .. i, left and "M" or "R", "MAGE", g }
+        settled["d" .. i] = true
+    end
+    local result = compute(rows, settled, false)
+    for _, row in ipairs(rows) do eq(sideOf(result[row[1]]), sideOf(row[4]), "settled players stay: " .. row[1]) end
+    for _, run in ipairs({ { settled, true }, { nil, false } }) do
+        result = compute(rows, run[1], run[2])
+        local L, R = tally(rows, result)
+        assert(math.abs(L.M - R.M) <= 1 and math.abs(L.R - R.R) <= 1, "melee/ranged even")
+        eq(L.T, R.T) eq(L.H, R.H) eq(L.n, R.n)
+    end
+end)
+
+test("settled monks split over both halves", function()
+    local rows, settled = settledRaid({})
+    local fill = { [1] = 0, [2] = 0, [3] = 0, [4] = 0 }
+    for _, row in ipairs(rows) do fill[row[4]] = fill[row[4]] + 1 end
+    for i = 1, 14 do
+        local left = i <= 7
+        local g = left and ((fill[1] < 5) and 1 or 3) or ((fill[2] < 5) and 2 or 4)
+        fill[g] = fill[g] + 1
+        -- two monks, both on the right
+        rows[#rows + 1] = { "d" .. i, (i % 2 == 0) and "M" or "R", (i == 8 or i == 9) and "MONK" or "MAGE", g }
+        settled["d" .. i] = true
+    end
+    local result = compute(rows, settled)
+    local L, R = tally(rows, result)
+    eq(L.cls.MONK, 1) eq(R.cls.MONK, 1)
+    eq(L.n, R.n)
+end)
+
+test("healers spread over the groups of a half", function()
+    -- L (1, 3): both healers and a tank in group 1, group 3 full of damage dealers
+    local rows = {
+        { "t1", "T", "WARRIOR", 1 }, { "h1", "H", "PRIEST", 1 }, { "h2", "H", "DRUID", 1 },
+        { "a1", "M", "ROGUE", 1 }, { "a2", "R", "MAGE", 1 },
+        { "a3", "M", "ROGUE", 3 }, { "a4", "R", "MAGE", 3 }, { "a5", "M", "ROGUE", 3 },
+        { "a6", "R", "MAGE", 3 }, { "a7", "R", "MAGE", 3 },
+        { "t2", "T", "WARRIOR", 2 }, { "h3", "H", "PRIEST", 2 }, { "b1", "M", "ROGUE", 2 },
+        { "b2", "R", "MAGE", 2 }, { "b3", "M", "ROGUE", 2 },
+        { "h4", "H", "DRUID", 4 }, { "b4", "R", "MAGE", 4 }, { "b5", "M", "ROGUE", 4 },
+        { "b6", "R", "MAGE", 4 }, { "b7", "R", "MAGE", 4 },
+    }
+    local all = {}
+    for _, row in ipairs(rows) do all[row[1]] = true end
+    local result = compute(rows, all)
+    local inG = { [1] = 0, [3] = 0 }
+    for _, h in ipairs({ "h1", "h2" }) do inG[result[h]] = (inG[result[h]] or 0) + 1 end
+    eq(inG[1], 1, "one healer in group 1")
+    eq(inG[3], 1, "one healer in group 3")
+    local moves = 0
+    for _, row in ipairs(rows) do
+        eq(sideOf(result[row[1]]), sideOf(row[4]), "nobody changes side: " .. row[1])
+        if result[row[1]] ~= row[4] then moves = moves + 1 end
+    end
+    eq(moves, 2, "a healer and a damage dealer swap groups")
+    -- stable: a second split moves nobody
+    for _, row in ipairs(rows) do row[4] = result[row[1]] end
+    local again = compute(rows, all)
+    for _, row in ipairs(rows) do eq(again[row[1]], row[4], "second split: " .. row[1]) end
+
+    -- six groups: three healers of the left half all in group 1 end up 1/1/1
+    rows = {}
+    for i = 1, 30 do
+        local g = math.floor((i - 1) / 5) + 1
+        local bucket = (i == 1 or i == 2 or i == 3) and "H" or (i == 6 or i == 7 or i == 8) and "H" or "R"
+        rows[i] = { "p" .. i, bucket, "MAGE", g }
+    end
+    result = compute(rows, nil, false, { 1, 3, 5 }, { 2, 4, 6 })
+    local per = {}
+    for _, row in ipairs(rows) do
+        if row[2] == "H" then per[result[row[1]]] = (per[result[row[1]]] or 0) + 1 end
+    end
+    for g = 1, 6 do eq(per[g], 1, "healers in group " .. g) end
+end)
+
+test("settled players: marked by a split, dropped when they leave or the raid ends", function()
+    Board:SetSource("demo")
+    local settled = Board:Settled()
+    assert(settled ~= ns.db.settled, "the demo does not touch the saved list")
+    eq(next(settled), nil, "nobody settled on a new board")
+    ns.Split.Run(Board)
+    for _, key in ipairs(Board.members) do assert(settled[key], key .. " settled") end
+    local gone = Board.members[5]
+    ns.Demo:Remove(gone)
+    eq(settled[gone], nil, "a leaver is forgotten")
+    eq(next(ns.db.settled), nil, "saved list untouched")
+    ns.db.settled["Someone-Silvermoon"] = true
+    stub.inRaid = false
+    Board:AutoSource()
+    eq(next(ns.db.settled), nil, "out of a raid: saved list wiped")
+end)
+
+test("whispers for a forced crossing", function()
+    local printed = {}
+    local add = DEFAULT_CHAT_FRAME.AddMessage
+    DEFAULT_CHAT_FRAME.AddMessage = function(_, msg) printed[#printed + 1] = msg end
+    Board:SetSource("demo")
+    ns.Split.Run(Board)
+    ns.Apply:RunDemo()
+    eq(next(Board.flipped), nil, "the first split whispers nobody")
+    -- both healers on the left leave
+    local leftHealers = {}
+    for _, key in ipairs(Board.members) do
+        if Players.Get(key).bucket == "H" and Board:PlayerSide(key) == "L" then tinsert(leftHealers, key) end
+    end
+    eq(#leftHealers, 2)
+    for _, key in ipairs(leftHealers) do ns.Demo:Remove(key) end
+    ns.Split.Run(Board)
+    local flipped = {}
+    for key, was in pairs(Board.flipped) do
+        flipped[#flipped + 1] = key
+        eq(was, "R")
+    end
+    eq(#flipped, 1, "one forced crossing")
+    local key = flipped[1]
+    eq(Players.Get(key).bucket, "H")
+    local list = ns.Announce.Whispers(Board)
+    eq(#list, 1)
+    eq(ns.Announce.WhisperText(list[1]), "Your group has changed to " .. Board.draft[key] .. " (Left).")
+    -- dragged back before Apply: no whisper
+    local g = Board.draft[key]
+    Board.draft[key] = Board.lastLive[key]
+    eq(#ns.Announce.Whispers(Board), 0, "dragged back")
+    Board.draft[key] = g
+    wipe(printed)
+    ns.Apply:RunDemo()
+    eq(#printed, 1)
+    assert(printed[1]:find("Demo, not sent: whisper to " .. Players.ShortName(key), 1, true), printed[1])
+    eq(next(Board.flipped), nil, "whispered once")
+    wipe(printed)
+    ns.Apply:RunDemo()
+    eq(#printed, 0, "no second whisper")
+
+    -- more than three at once: none, one local line
+    for _, k in ipairs(Board.members) do
+        if Board:PlayerSide(k) and not Board:IsOffline(k) then
+            Board.flipped[k] = Board:PlayerSide(k) == "L" and "R" or "L"
+        end
+    end
+    local list2, n = ns.Announce.Whispers(Board)
+    eq(#list2, 0) assert(n > 3)
+    wipe(printed)
+    ns.Announce.SendWhispers()
+    eq(#printed, 1)
+    assert(printed[1]:find("switched halves; no whispers sent", 1, true), printed[1])
+
+    -- offline players get nothing
+    local off
+    for _, k in ipairs(Board.members) do if Board:IsOffline(k) then off = k end end
+    Board.flipped[off] = Board:PlayerSide(off) == "L" and "R" or "L"
+    eq(#ns.Announce.Whispers(Board), 0, "offline")
+    wipe(Board.flipped)
+
+    -- live raid: a real whisper to Name-Realm
+    stub.chat = {}
+    Board.source = "live"
+    local saved = ns.Raid.members
+    ns.Raid.members = ns.Demo.members
+    Board.flipped[key] = "R"
+    ns.Announce.SendWhispers()
+    eq(#stub.chat, 1)
+    eq(stub.chat[1][2], "WHISPER")
+    eq(stub.chat[1][3], key)
+    ns.Raid.members = saved
+    Board.source = "demo"
+
+    -- a fresh split and the setting off record nothing
+    Board:SetSource("demo")
+    ns.Split.Run(Board)
+    ns.Apply:RunDemo()
+    for _, k in ipairs(leftHealers) do ns.Demo:Remove(k) end
+    ns.Split.Run(Board, true)
+    eq(next(Board.flipped), nil, "fresh split")
+    Board:SetSource("demo")
+    ns.Split.Run(Board)
+    ns.Apply:RunDemo()
+    for _, k in ipairs(Board.members) do
+        if Players.Get(k).bucket == "H" and Board:PlayerSide(k) == "L" then ns.Demo:Remove(k) end
+    end
+    ns.settings.whisperSwitches = false
+    ns.Split.Run(Board)
+    eq(next(Board.flipped), nil, "setting off")
+    ns.settings.whisperSwitches = true
+    DEFAULT_CHAT_FRAME.AddMessage = add
+    Board:SetSource("demo")
+end)
+
+---------------------------------------------------------------------------
 local function simulate(members, target)
     local steps = 0
     while true do
@@ -675,9 +1014,11 @@ test("turning the shared group on and off keeps sides", function()
     for _, key in ipairs(Board.members) do before[key] = Board:PlayerSide(key) end
     local groups = {}
     for k, v in pairs(Board.draft) do groups[k] = v end
+    local o1, o2, o34 = Board:Occupancy(1), Board:Occupancy(2), Board:Occupancy(3) + Board:Occupancy(4)
     Board:SetShared(true)
     eq(Board:K(), 3)
-    eq(Board:Occupancy(1), 5) eq(Board:Occupancy(2), 5) eq(Board:Occupancy(3), 3)
+    -- the halves' last groups (3 and 4) merge into the shared group
+    eq(Board:Occupancy(1), o1) eq(Board:Occupancy(2), o2) eq(Board:Occupancy(3), o34)
     for _, key in ipairs(Board.members) do eq(Board:PlayerSide(key), before[key], key) end
     Board:SetShared(false)
     eq(Board:K(), 4)

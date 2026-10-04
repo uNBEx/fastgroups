@@ -33,7 +33,12 @@ changing from boss to boss.
   everyone on their side. Half names are configurable.
 - **Mythic aware**: on Mythic only groups 1-4 count; groups 5-8 are shown as the bench.
 - **Auto-split**: balances tanks, healers, melee, ranged and classes between the halves while
-  moving as few players as possible (2 tanks / 4 healers / 14 dps become 1/2/7 per half).
+  moving as few players as possible (2 tanks / 4 healers / 14 dps become 1/2/7 per half), and
+  spreads each half's healers over its groups. Built for PUG churn: players an earlier split
+  placed keep their half, and newcomers even out melee, ranged and classes. Only tanks, healers,
+  half sizes and Monk / Demon Hunter coverage move them, and those players get a whisper with
+  their new group (opt-out). Shift-click rebalances everyone; "Strict melee/ranged balance" makes
+  melee and ranged count as much as healers.
 - **Draft, then Apply**: edit freely; nothing changes in the real raid until you press Apply.
   FastGroups then moves players one at a time, waiting for the server to confirm each move,
   and stops if combat starts.

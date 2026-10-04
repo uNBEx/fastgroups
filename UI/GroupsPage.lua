@@ -808,7 +808,7 @@ local function fillCounters(f, side, width)
         if not c.shown then
             c:Hide()
         else
-            local bad = not all and k ~= "U" and Board.Uneven(vals[k], ovals[k])
+            local bad = not all and Board.Strict(k) and Board.Uneven(vals[k], ovals[k])
             c.num:SetTextColor(T.Color(bad and "warn" or "text"))
             c.border:SetVertexColor(T.Color(bad and "warn" or "line"))
             c.border:SetAlpha(bad and 0.7 or 1)
@@ -827,8 +827,8 @@ local function fillCounters(f, side, width)
     local cx = f.clsLabel:GetUnboundedStringWidth() + 10
     for _, class in ipairs(Data.CLASSES) do
         local a, b = cls[class] or 0, other.cls[class] or 0
-        local bad = not all and Board.Uneven(a, b)
-        if (a > 0 or b > 0) and (all or Data.BUFF_CLASSES[class] or bad) then
+        local bad = not all and Data.BUFF_CLASSES[class] and Board.Missing(a, b)
+        if (a > 0 or b > 0) and (all or Data.BUFF_CLASSES[class] or Board.Uneven(a, b)) then
             n = n + 1
             local c = classChip(f, n)
             c.sq:SetVertexColor(Data.ClassColor(class))
@@ -839,7 +839,7 @@ local function fillCounters(f, side, width)
             c.star:SetShown(Data.BUFF_CLASSES[class] and true or false)
             c.star:SetTextColor(T.Accent())
             c.tip = Data.ClassName(class) .. ": " .. a .. (where or (" here, " .. b .. " on the other half"
-                .. (Data.BUFF_CLASSES[class] and "\nRaid debuff class, keep it even." or "")))
+                .. (Data.BUFF_CLASSES[class] and "\nRaid debuff class, keep one on each half." or "")))
             local w = 6 + 10 + 5 + c.num:GetUnboundedStringWidth() + (c.star:IsShown() and 8 or 0) + 7
             c:SetWidth(math.floor(w))
             if cx + w > width then break end
@@ -948,13 +948,21 @@ function Page:Build(f)
         end
     end)
     self.split = W.Button(tb, { text = "Auto-split", icon = "wand", height = 28, onClick = function()
-        local n = ns.Split.Run(Board)
+        local fresh = IsShiftKeyDown()
+        local n = ns.Split.Run(Board, fresh)
+        local what = fresh and "Rebalanced everyone" or "Auto-split done"
         if Board:IsLiveLike() then
-            UI.Toast("Auto-split done: " .. n .. " move" .. (n == 1 and "" or "s") .. " pending. Review, then Apply.", "ok")
+            UI.Toast(what .. ": " .. n .. " move" .. (n == 1 and "" or "s") .. " pending. Review, then Apply.", "ok")
         else
-            UI.Toast("Auto-split done.", "ok")
+            UI.Toast(what .. ".", "ok")
         end
-    end, tooltip = "Balance tanks, healers, melee, ranged and classes between the halves, moving as few players as possible." })
+    end, tooltip = function(b)
+        W.Tooltip(b, "Auto-split", {
+            "Balances tanks, healers and half sizes. Players an earlier Auto-split placed keep their side; "
+                .. "newcomers even out melee, ranged and classes.",
+            "Shift-click: rebalance everyone.",
+        })
+    end })
 
     self.chip = CreateFrame("Frame", nil, tb)
     self.chip:SetHeight(26)
@@ -1205,7 +1213,8 @@ function Page:RefreshToolbar()
             self.chip.border:SetVertexColor(T.Color("ok"))
             self.chip.border:SetAlpha(0.4)
             self.chip.tipTitle = "Halves are even"
-            self.chip.tip = { "Tanks, healers, melee, ranged and every class are split as evenly as possible." }
+            self.chip.tip = { (ns.settings.strictPositions and "Tanks, healers, melee and ranged" or "Tanks and healers")
+                .. " are split evenly, and Monks and Demon Hunters are on both halves." }
         else
             self.chip.icon:SetTexture(T.ICON .. "warn")
             self.chip.icon:SetVertexColor(T.Color("warn"))

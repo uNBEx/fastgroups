@@ -28,7 +28,8 @@ This is also very useful for PUGs, as you can quickly set up the groups even whe
 - **Balanced halves**: odd/even (1/3/5 vs 2/4/6) or low/high groups, with tank, healer, melee
   and ranged counters per half. Or plain groups without halves.
 - **Auto-split**: balances roles and classes between the halves while moving as few players as
-  possible.
+  possible. Players placed by an earlier split keep their half when the group changes from pull
+  to pull; the rare forced move gets a whisper.
 - **Draft, then Apply**: nothing changes in the raid until you press Apply.
 - **Mythic aware**: only groups 1-4 count; groups 5-8 are the bench.
 - **Loadouts**: save setups per boss. Loading one shows who is missing, new or returning, and

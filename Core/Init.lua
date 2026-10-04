@@ -109,6 +109,8 @@ ns.defaults = {
         confirmApply = true,
         autoInspect = true,
         rememberSides = true,
+        strictPositions = false,   -- Auto-split moves placed players to even out melee and ranged
+        whisperSwitches = true,    -- whisper players a later Auto-split had to send to the other half
         acceptFrom = "ask",        -- "ask" | "leader" | "never"
         minimap = { hide = false },
         window = { w = 1040, h = 660 },
@@ -118,6 +120,7 @@ ns.defaults = {
     loadouts = {},  -- see Core/Loadouts.lua
     rosters = {},   -- see Core/Rosters.lua
     trusted = {},   -- ["Name-Realm"] = true, auto accept shares
+    settled = {},   -- ["Name-Realm"] = true, placed by Auto-split in the current raid
 }
 
 local function applyDefaults(dst, src)

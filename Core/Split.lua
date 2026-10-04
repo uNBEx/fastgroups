@@ -1,5 +1,14 @@
--- Auto-split: balance tanks, healers, melee, ranged and classes between the
--- two halves while moving as few players as possible.
+-- Auto-split: balance the two halves in strict order of priority.
+--   1. must: half sizes, tanks, healers, and a Monk / Demon Hunter on each
+--      half once there are two (with strict positions also melee, ranged and
+--      unknown)
+--   2. side changes of settled players (placed by an earlier split)
+--   3. melee, ranged and unknown (when not strict)
+--   4. classes
+--   5. moves of everyone else
+-- A fresh raid has nobody settled, so the first split balances everything.
+-- Later splits keep earlier players on their side unless tier 1 needs them,
+-- and newcomers even out the rest.
 local _, ns = ...
 
 local Data = ns.Data
@@ -9,43 +18,49 @@ ns.Split = Split
 
 local GROUP_SIZE = 5
 local BUCKETS = { "T", "H", "M", "R", "?" }
+local SIDES = { "L", "R" }
 -- who goes to the shared group first: damage dealers, ranged before melee
 local SHARED_ORDER = { ["?"] = 1, R = 2, M = 3, H = 4, T = 5 }
 
--- Size and role imbalance between the halves.
-local function roleCost(cnt)
-    local d = cnt.L.n - cnt.R.n
-    local cost = d * d
-    for _, b in ipairs(BUCKETS) do
-        d = cnt.L.b[b] - cnt.R.b[b]
-        cost = cost + d * d
+local function sq(a, b)
+    local d = a - b
+    return d * d
+end
+
+local function classCost(L, R)
+    local cost = 0
+    for _, class in ipairs(Data.CLASSES) do
+        cost = cost + sq(L.c[class] or 0, R.c[class] or 0) * (Data.BUFF_CLASSES[class] and 3 or 1)
     end
     return cost
 end
 
-local function classCost(cnt)
-    local cost = 0
-    for _, class in ipairs(Data.CLASSES) do
-        local d = (cnt.L.c[class] or 0) - (cnt.R.c[class] or 0)
-        cost = cost + d * d * (Data.BUFF_CLASSES[class] and 3 or 1)
+-- Is cost a lower than cost b? Both are arrays of the five tiers.
+local function less(a, b)
+    for i = 1, 5 do
+        if a[i] ~= b[i] then return a[i] < b[i] end
     end
-    return cost
+    return false
 end
 
 --[[ Pure core, used by the board and the tests.
-  opts.keys     array of player keys to place
-  opts.info     function(key) -> table with .bucket and .class
-  opts.current  key -> current group (0 = none)
+  opts.keys      array of player keys to place
+  opts.info      function(key) -> table with .bucket and .class
+  opts.current   key -> current group (0 = none)
   opts.L, opts.R arrays of group numbers for each half
-  opts.S        shared group, or nil. The halves fill their own groups and
-                the rest of each half goes to S with a side of its own.
-  opts.sides    key -> "L"|"R", the own side of players currently in S
+  opts.S         shared group, or nil. The halves fill their own groups and
+                 the rest of each half goes to S with a side of its own.
+  opts.sides     key -> "L"|"R", the own side of players currently in S
+  opts.settled   key -> true for players an earlier split placed
+  opts.strictPos true: melee, ranged and unknown count as much as tanks
   Returns key -> group (0 when both halves are full) and key -> side for
   the players placed in S.
 ]]
 function Split.Compute(opts)
     local keys, info, current, L, R, S = opts.keys, opts.info, opts.current, opts.L, opts.R, opts.S
     local sides = opts.sides or {}
+    local settled = opts.settled or {}
+    local strict = opts.strictPos
     local sideOfGroup = {}
     for _, g in ipairs(L) do sideOfGroup[g] = "L" end
     for _, g in ipairs(R) do sideOfGroup[g] = "R" end
@@ -85,58 +100,112 @@ function Split.Compute(opts)
         return a < b
     end)
 
-    local function newCounts()
-        local cnt = { L = { n = 0, b = {}, c = {} }, R = { n = 0, b = {}, c = {} } }
-        for _, t in pairs(cnt) do
-            for _, b in ipairs(BUCKETS) do t.b[b] = 0 end
+    -- A state: who is on which side, the counts per half and how many
+    -- settled (sm) and other (fm) players left their current side.
+    local function newState()
+        local st = { side = {}, sm = 0, fm = 0, cost = {} }
+        for _, s in ipairs(SIDES) do
+            st[s] = { n = 0, b = {}, c = {} }
+            for _, b in ipairs(BUCKETS) do st[s].b[b] = 0 end
         end
-        return cnt
+        -- nobody is placed yet: everyone with a side has left it
+        for _, key in ipairs(keys) do
+            if cur[key] then
+                if settled[key] then st.sm = st.sm + 1 else st.fm = st.fm + 1 end
+            end
+        end
+        return st
     end
-    local function add(cnt, s, key)
-        local t = cnt[s]
-        t.n = t.n + 1
-        t.b[bucket[key]] = t.b[bucket[key]] + 1
-        t.c[class[key]] = (t.c[class[key]] or 0) + 1
+    -- Put key on side s (nil = off the halves).
+    local function put(st, key, s)
+        local old = st.side[key]
+        if old == s then return end
+        local b, c = bucket[key], class[key]
+        if old then
+            local t = st[old]
+            t.n = t.n - 1
+            t.b[b] = t.b[b] - 1
+            t.c[c] = t.c[c] - 1
+        end
+        if s then
+            local t = st[s]
+            t.n = t.n + 1
+            t.b[b] = t.b[b] + 1
+            t.c[c] = (t.c[c] or 0) + 1
+        end
+        local was = cur[key] ~= nil and old ~= cur[key]
+        local now = cur[key] ~= nil and s ~= cur[key]
+        if was ~= now then
+            local d = now and 1 or -1
+            if settled[key] then st.sm = st.sm + d else st.fm = st.fm + d end
+        end
+        st.side[key] = s
+    end
+    -- The five tiers of the state's cost, written into out.
+    local function cost(st, out)
+        local l, r = st.L, st.R
+        local must = sq(l.n, r.n) + sq(l.b.T, r.b.T) + sq(l.b.H, r.b.H)
+        local pos = sq(l.b.M, r.b.M) + sq(l.b.R, r.b.R) + sq(l.b["?"], r.b["?"])
+        for c in pairs(Data.BUFF_CLASSES) do
+            local a, b = l.c[c] or 0, r.c[c] or 0
+            if a + b >= 2 and (a == 0 or b == 0) then must = must + 1 end
+        end
+        if strict then must, pos = must + pos, 0 end
+        out[1], out[2], out[3], out[4], out[5] = must, st.sm, pos, classCost(l, r), st.fm
+        return out
     end
 
-    -- Local search: swap same-bucket pairs across halves when it lowers
-    -- class imbalance, or keeps it and saves moves. Returns the final cost.
-    local function improve(side, cnt)
-        local function moves()
-            local m = 0
-            for _, key in ipairs(keys) do
-                if side[key] and side[key] ~= cur[key] then m = m + 1 end
+    -- Place one player on the side that needs their role and class most.
+    local function greedy(st, key)
+        if st.L.n + st.R.n >= limit then return end
+        local b, c = bucket[key], class[key]
+        local best, bestScore
+        for _, s in ipairs(SIDES) do
+            local t = st[s]
+            if t.n < cap[s] then
+                -- lexicographic: bucket count, class count, stay on current side, size
+                local score = t.b[b] * 1000000 + (t.c[c] or 0) * 10000
+                    + ((cur[key] == s) and 0 or 100) + t.n
+                if not bestScore or score < bestScore then best, bestScore = s, score end
             end
-            return m
         end
-        local base = roleCost(cnt) * 1000000
-        local cost = base + classCost(cnt) * 100 + moves()
+        if best then put(st, key, best) end
+    end
+
+    -- Local search: move single players and swap any pair across the halves
+    -- while that lowers the cost. Leaves the final cost in st.cost.
+    local try = {}
+    local function improve(st)
+        local side = st.side
+        cost(st, st.cost)
+        local function keep()
+            if less(cost(st, try), st.cost) then
+                for i = 1, 5 do st.cost[i] = try[i] end
+                return true
+            end
+            return false
+        end
         for _ = 1, 50 do
             local improved = false
             for _, a in ipairs(order) do
-                if side[a] == "L" then
+                local sa = side[a]
+                if sa then
+                    local other = sa == "L" and "R" or "L"
+                    if st[other].n < cap[other] then
+                        put(st, a, other)
+                        if keep() then improved = true else put(st, a, sa) end
+                    end
                     for _, b in ipairs(order) do
-                        if side[b] == "R" and bucket[a] == bucket[b] and side[a] == "L" then
-                            local ca, cb = class[a], class[b]
-                            side[a], side[b] = "R", "L"
-                            if ca ~= cb then
-                                cnt.L.c[ca] = cnt.L.c[ca] - 1
-                                cnt.R.c[ca] = (cnt.R.c[ca] or 0) + 1
-                                cnt.R.c[cb] = cnt.R.c[cb] - 1
-                                cnt.L.c[cb] = (cnt.L.c[cb] or 0) + 1
-                            end
-                            local newCost = base + classCost(cnt) * 100 + moves()
-                            if newCost < cost then
-                                cost = newCost
+                        sa = side[a]
+                        local sb = side[b]
+                        if sb and sb ~= sa then
+                            put(st, a, sb)
+                            put(st, b, sa)
+                            if keep() then
                                 improved = true
                             else
-                                side[a], side[b] = "L", "R"
-                                if ca ~= cb then
-                                    cnt.L.c[ca] = cnt.L.c[ca] + 1
-                                    cnt.R.c[ca] = cnt.R.c[ca] - 1
-                                    cnt.R.c[cb] = cnt.R.c[cb] + 1
-                                    cnt.L.c[cb] = cnt.L.c[cb] - 1
-                                end
+                                put(st, a, sa)
+                                put(st, b, sb)
                             end
                         end
                     end
@@ -144,55 +213,43 @@ function Split.Compute(opts)
             end
             if not improved then break end
         end
-        return cost
     end
 
-    -- Start 1: greedy, role by role.
-    local side, cnt = {}, newCounts()
-    local placed = 0
+    -- Start A: everyone on their current side, newcomers placed greedily.
+    local a = newState()
     for _, key in ipairs(order) do
-        local b, c = bucket[key], class[key]
-        local best, bestScore
-        for _, s in ipairs({ "L", "R" }) do
-            local t = cnt[s]
-            if t.n < cap[s] and placed < limit then
-                -- lexicographic: bucket count, class count, stay on current side, size
-                local score = t.b[b] * 1000000 + (t.c[c] or 0) * 10000
-                    + ((cur[key] == s) and 0 or 100) + t.n
-                if not bestScore or score < bestScore then best, bestScore = s, score end
+        if cur[key] then put(a, key, cur[key]) end
+    end
+    -- a half over its cap (possible with the shared group) gives players
+    -- away, newcomers and damage dealers first
+    for pass = 1, 2 do
+        for i = #order, 1, -1 do
+            local key = order[i]
+            local s = a.side[key]
+            if s and a[s].n > cap[s] and (pass == 2 or not settled[key]) then
+                put(a, key, s == "L" and "R" or "L")
             end
         end
-        if best then
-            side[key] = best
-            placed = placed + 1
-            add(cnt, best, key)
-        end
     end
-    local cost = improve(side, cnt)
+    for _, key in ipairs(order) do
+        if not cur[key] then greedy(a, key) end
+    end
+    improve(a)
 
-    -- Start 2: the current sides, when everyone has one and they fit. A
-    -- board that is already balanced then stays as it is.
-    local cside, ccnt = {}, newCounts()
-    local whole = true
-    for _, key in ipairs(keys) do
-        local s = cur[key]
-        if not s then
-            whole = false
-            break
-        end
-        cside[key] = s
-        add(ccnt, s, key)
-    end
-    if whole and ccnt.L.n <= cap.L and ccnt.R.n <= cap.R then
-        if improve(cside, ccnt) <= cost then side = cside end
-    end
+    -- Start B: greedy from scratch, role by role.
+    local b = newState()
+    for _, key in ipairs(order) do greedy(b, key) end
+    improve(b)
+
+    local side = less(b.cost, a.cost) and b.side or a.side
 
     -- Placement inside each half: with a shared group, the players past the
     -- half's own groups go there (those already in it first, then damage
-    -- dealers). Everyone else keeps the current group when it is on the
-    -- right side and has room, then groups fill in order.
+    -- dealers). Healers spread over the half's groups. Everyone else keeps
+    -- the current group when it is on the right side and has room, then
+    -- groups fill in order.
     local result, sharedSides = {}, {}
-    for _, s in ipairs({ "L", "R" }) do
+    for _, s in ipairs(SIDES) do
         local groups = s == "L" and L or R
         if S then
             local mine = {}
@@ -201,13 +258,13 @@ function Split.Compute(opts)
             end
             local over = #mine - #groups * GROUP_SIZE
             if over > 0 then
-                table.sort(mine, function(a, b)
-                    local sa = current[a] == S and sides[a] == s
-                    local sb = current[b] == S and sides[b] == s
-                    if sa ~= sb then return sa end
-                    local oa, ob = SHARED_ORDER[bucket[a]] or 1, SHARED_ORDER[bucket[b]] or 1
-                    if oa ~= ob then return oa < ob end
-                    return a < b
+                table.sort(mine, function(x, y)
+                    local sx = current[x] == S and sides[x] == s
+                    local sy = current[y] == S and sides[y] == s
+                    if sx ~= sy then return sx end
+                    local ox, oy = SHARED_ORDER[bucket[x]] or 1, SHARED_ORDER[bucket[y]] or 1
+                    if ox ~= oy then return ox < oy end
+                    return x < y
                 end)
                 for i = 1, over do
                     result[mine[i]] = S
@@ -215,8 +272,52 @@ function Split.Compute(opts)
                 end
             end
         end
-        local fill = {}
-        for _, g in ipairs(groups) do fill[g] = 0 end
+        local fill, held, idx = {}, {}, {}
+        for i, g in ipairs(groups) do
+            fill[g], held[g], idx[g] = 0, 0, i
+        end
+
+        -- Healers: an even share per group. The groups that already hold the
+        -- most get the extra ones, so as few healers as possible move.
+        local healers = {}
+        for _, key in ipairs(order) do
+            if side[key] == s and not result[key] and bucket[key] == "H" then
+                tinsert(healers, key)
+                local g = current[key]
+                if held[g] then held[g] = held[g] + 1 end
+            end
+        end
+        if #healers > 0 and #groups > 0 then
+            local byHeld = {}
+            for i, g in ipairs(groups) do byHeld[i] = g end
+            table.sort(byHeld, function(x, y)
+                if held[x] ~= held[y] then return held[x] > held[y] end
+                return idx[x] < idx[y]
+            end)
+            local base, extra = math.floor(#healers / #groups), #healers % #groups
+            local quota = {}
+            for i, g in ipairs(byHeld) do quota[g] = base + (i <= extra and 1 or 0) end
+            local rest = {}
+            for _, key in ipairs(healers) do
+                local g = current[key]
+                if quota[g] and fill[g] < quota[g] then
+                    fill[g] = fill[g] + 1
+                    result[key] = g
+                else
+                    tinsert(rest, key)
+                end
+            end
+            for _, key in ipairs(rest) do
+                for _, g in ipairs(groups) do
+                    if fill[g] < quota[g] then
+                        fill[g] = fill[g] + 1
+                        result[key] = g
+                        break
+                    end
+                end
+            end
+        end
+
         local rest = {}
         for _, key in ipairs(order) do
             if side[key] == s and not result[key] then
@@ -245,8 +346,9 @@ function Split.Compute(opts)
     return result, sharedSides
 end
 
--- Split the board. Bench groups (beyond the halves) are left alone.
-function Split.Run(board)
+-- Split the board. Bench groups (beyond the halves) are left alone. fresh
+-- ignores who earlier splits placed and rebalances everyone.
+function Split.Run(board, fresh)
     board = board or ns.Board
     if board:IsSimple() then return 0 end
     local k = board:K()
@@ -256,16 +358,43 @@ function Split.Run(board)
         if g <= k then tinsert(keys, key) end
     end
     local L, R = board:Halves()
+    local S = board:Shared()
+    local settled = board:Settled()
+    -- the live side of settled players, to whisper the ones sent across
+    local before = {}
+    local live = board:Live()
+    wipe(board.flipped)
+    if live and not fresh and ns.settings.whisperSwitches then
+        for _, key in ipairs(keys) do
+            local m = live[key]
+            if settled[key] and m then
+                if m.group == S then
+                    before[key] = board.sides[key]
+                else
+                    before[key] = board:SideOf(m.group)
+                end
+            end
+        end
+    end
     wipe(board.ghosts)
     wipe(board.subs)
     wipe(board.tags)
     board.loaded = nil
     local result, sides = Split.Compute({
         keys = keys, info = ns.Players.Get, current = board.draft, L = L, R = R,
-        S = board:Shared(), sides = board.sides,
+        S = S, sides = board.sides, settled = not fresh and settled or nil,
+        strictPos = ns.settings.strictPositions,
     })
     for key, g in pairs(result) do board.draft[key] = g end
     for key, s in pairs(sides) do board.sides[key] = s end
+    for _, key in ipairs(keys) do
+        if board.draft[key] > 0 then settled[key] = true end
+        local was = before[key]
+        if was then
+            local now = board:PlayerSide(key)
+            if now and now ~= was then board.flipped[key] = was end
+        end
+    end
     board:Changed()
     return board:Pending()
 end
